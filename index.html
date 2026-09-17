@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>優德美科技 · 軟體工程師績效考核與專案積分系統</title>
+  <meta name="description" content="優德美科技軟體工程師績效考核機制，支援智慧建築、非智慧建築、維護專案、每月上傳積分計算、主管多工程師佔比配置、助理審核與去年同期比較。">
+  
+  <!-- CSS 核心樣式 -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/components.css">
+  
+  <!-- Chart.js 視覺化套件 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- 頂部導覽與控制列 -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="brand-logo">📐</div>
+        <div class="brand-info">
+          <h1>優德美科技 · 軟體工程師績效考核系統</h1>
+          <p>專案積分評估 · 多工程師主管佔比填寫 · 助理專審 · 去年同期 (YoY) 比較分析</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <!-- 資安加密狀態 -->
+        <div id="security-status-badge" class="security-badge local" title="Web Crypto API 傳輸防護">
+          <span class="status-dot blue"></span> 本地安全沙盒模式
+        </div>
+
+        <!-- 角色切換面板 (展示與測試用) -->
+        <div class="role-switcher-box" title="切換不同權限角色視角">
+          <span id="current-user-avatar" class="user-avatar-icon">👑</span>
+          <select id="select-user-role">
+            <option value="admin">1. 超級使用者 (全域總覽)</option>
+            <option value="manager1">2. 主管 (王主管 - 填寫付出佔比)</option>
+            <option value="eng_lin">3. 工程師 (林軟體 - 個人績效)</option>
+            <option value="eng_lee">3. 工程師 (李程式 - 個人績效)</option>
+            <option value="eng_chang">3. 工程師 (張工程 - 個人績效)</option>
+            <option value="assistant1">4. 助理 (陳助理 - 審核與新增專案)</option>
+          </select>
+          <span id="current-role-badge" class="badge badge-role badge-admin">超級使用者</span>
+        </div>
+
+        <!-- 同步 Google Sheet 按鈕 -->
+        <button id="btn-sync-data" class="btn btn-secondary" title="手動與 Google Sheet 同步資料">
+          🔄 <span>同步試算表</span>
+        </button>
+
+        <!-- 系統設定按鈕 -->
+        <button id="btn-open-settings" class="btn btn-secondary btn-icon" title="Google Sheet 與加密金鑰設定">
+          ⚙️
+        </button>
+
+        <!-- 主題切換 (深色/淺色) -->
+        <button id="btn-toggle-theme" class="btn btn-secondary btn-icon" title="切換深色/淺色主題">
+          ☀️
+        </button>
+      </div>
+    </header>
+
+    <!-- 篩選與操作工具列 -->
+    <section class="toolbar-section">
+      <div class="filter-group">
+        <!-- 年度篩選 -->
+        <div class="filter-item">
+          <label for="filter-year">考核年度：</label>
+          <select id="filter-year" class="select-ctrl">
+            <option value="2026" selected>2026 年度</option>
+            <option value="2025">2025 年度 (去年)</option>
+            <option value="2024">2024 年度</option>
+            <option value="ALL">全部歷史年度</option>
+          </select>
+        </div>
+
+        <!-- 月份篩選 -->
+        <div class="filter-item">
+          <label for="filter-month">月份區段：</label>
+          <select id="filter-month" class="select-ctrl">
+            <option value="ALL" selected>全年度累計</option>
+            <option value="01">01 月</option>
+            <option value="02">02 月</option>
+            <option value="03">03 月</option>
+            <option value="04">04 月</option>
+            <option value="05">05 月</option>
+            <option value="06">06 月</option>
+            <option value="07">07 月</option>
+            <option value="08">08 月</option>
+            <option value="09">09 月</option>
+            <option value="10">10 月</option>
+            <option value="11">11 月</option>
+            <option value="12">12 月</option>
+          </select>
+        </div>
+
+        <!-- 軟體工程師篩選 -->
+        <div class="filter-item">
+          <label for="filter-engineer">軟體工程師：</label>
+          <select id="filter-engineer" class="select-ctrl">
+            <option value="ALL">全部軟體工程師</option>
+          </select>
+        </div>
+
+        <!-- 搜尋框 -->
+        <div class="filter-item">
+          <input type="text" id="search-keyword" class="input-ctrl" placeholder="🔍 搜尋案編、案名、圖編...">
+        </div>
+      </div>
+
+      <!-- 右側動作按鈕：助理與超級使用者可新增專案 -->
+      <div class="action-group">
+        <button id="btn-open-add-project" class="btn btn-primary">
+          ➕ <span>新增專案</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- KPI 統計數字看板 -->
+    <section class="kpi-grid">
+      <!-- 總認列積分 -->
+      <div class="kpi-card total">
+        <div class="kpi-header">
+          <span class="kpi-title">考核認列總積分</span>
+          <span class="kpi-icon">🏆</span>
+        </div>
+        <div class="kpi-value">
+          <span id="stat-total-score">0.0</span>
+          <span class="kpi-unit">分</span>
+        </div>
+        <div class="kpi-subtext">統計區間：<strong id="current-period-display">2026 年度</strong></div>
+      </div>
+
+      <!-- 智慧建築積分 -->
+      <div class="kpi-card smart">
+        <div class="kpi-header">
+          <span class="kpi-title">智慧建築專案積分</span>
+          <span class="kpi-icon">🏙️</span>
+        </div>
+        <div class="kpi-value">
+          <span id="stat-smart-score">0.0</span>
+          <span class="kpi-unit">分</span>
+        </div>
+        <div class="kpi-subtext">計算規則：(報價/10000) × 等級係數</div>
+      </div>
+
+      <!-- 非智慧建築積分 -->
+      <div class="kpi-card nonsmart">
+        <div class="kpi-header">
+          <span class="kpi-title">非智慧建築積分</span>
+          <span class="kpi-icon">🏢</span>
+        </div>
+        <div class="kpi-value">
+          <span id="stat-nonsmart-score">0.0</span>
+          <span class="kpi-unit">分</span>
+        </div>
+        <div class="kpi-subtext">計算規則：依戶數級距評定 (4~10分)</div>
+      </div>
+
+      <!-- 維護專案積分 -->
+      <div class="kpi-card maintenance">
+        <div class="kpi-header">
+          <span class="kpi-title">維護專案積分</span>
+          <span class="kpi-icon">🛠️</span>
+        </div>
+        <div class="kpi-value">
+          <span id="stat-maint-score">0.0</span>
+          <span class="kpi-unit">分</span>
+        </div>
+        <div class="kpi-subtext">計算規則：固定 1 案 1 分</div>
+      </div>
+
+      <!-- 每月固定上傳資料 -->
+      <div class="kpi-card upload">
+        <div class="kpi-header">
+          <span class="kpi-title">每月固定上傳積分</span>
+          <span class="kpi-icon">📤</span>
+        </div>
+        <div class="kpi-value">
+          <span id="stat-upload-score">0.0</span>
+          <span class="kpi-unit">分</span>
+        </div>
+        <div class="kpi-subtext">助理核可發放：0.2 分 / 月</div>
+      </div>
+
+      <!-- 專案結案總量 -->
+      <div class="kpi-card total">
+        <div class="kpi-header">
+          <span class="kpi-title">軟體已完成專案數</span>
+          <span class="kpi-icon">📊</span>
+        </div>
+        <div class="kpi-value">
+          <span id="stat-project-count">0 案</span>
+        </div>
+        <div class="kpi-subtext">專案工程師不計分，僅評估軟體工程師</div>
+      </div>
+    </section>
+
+    <!-- 頁籤切換選單 -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="projects">
+        📑 <span>專案考核明細表</span>
+      </button>
+      <button class="nav-tab" data-tab="leaderboard">
+        📈 <span>工程師圖形化分佈 & 去年同期比較 (YoY)</span>
+      </button>
+      <button class="nav-tab" id="tab-assistant-audit" data-tab="assistant_audit">
+        🛡️ <span>助理專屬審查中心 (上傳審核 & 完成度)</span>
+      </button>
+      <button class="nav-tab" data-tab="settings_guide">
+        💡 <span>Google Sheet 串接與資安手冊</span>
+      </button>
+    </nav>
+
+    <!-- 分頁 1: 專案考核明細表 -->
+    <div id="pane-projects" class="tab-pane active">
+      <div class="table-responsive">
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th>案編</th>
+              <th>案名 / 圖編</th>
+              <th>收件日期</th>
+              <th>整合項目</th>
+              <th>專案工程師</th>
+              <th>建築類別 / 等級 / 戶數</th>
+              <th>報價金額</th>
+              <th>專案基準分</th>
+              <th>軟體工程師 (主管佔比 / 實得分)</th>
+              <th>軟體完成時間</th>
+              <th>硬體完成時間</th>
+              <th>進度</th>
+              <th>狀態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="projects-table-body">
+            <!-- 動態注入專案列表 -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 分頁 2: 圖形化分佈與去年同期比較 (YoY) -->
+    <div id="pane-leaderboard" class="tab-pane">
+      <!-- 圖表儀表板網格 -->
+      <div class="charts-dashboard-grid">
+        <!-- 圖表 1: 各工程師 (智慧建築、非智慧、維護、每月上傳) 堆疊分析 -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <div class="chart-card-title">📊 各軟體工程師績效積分項目分佈圖</div>
+              <div class="chart-card-desc">展示智慧建築、非智慧建築、維護專案與每月上傳之堆疊結構</div>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-engineer-categories"></canvas>
+          </div>
+        </div>
+
+        <!-- 圖表 2: 專案類型與積分佔比環狀圖 -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <div class="chart-card-title">🍩 全體專案積分結構佔比</div>
+              <div class="chart-card-desc">智慧建築 vs 一般戶數建築 vs 維護 vs 上傳</div>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-distribution"></canvas>
+          </div>
+        </div>
+
+        <!-- 圖表 3: 去年同期比較表 (YoY Comparison Chart) -->
+        <div class="chart-card full-width">
+          <div class="chart-card-header">
+            <div>
+              <div class="chart-card-title">📈 去年同期 (YoY) 軟體工程師績效成長比較圖</div>
+              <div class="chart-card-desc">直觀對比本期認列積分與去年同期積分變化</div>
+            </div>
+          </div>
+          <div class="chart-container" style="height: 320px;">
+            <canvas id="chart-yoy"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 去年同期詳細數據比較表 -->
+      <div class="chart-card mt-3">
+        <div class="chart-card-header">
+          <div class="chart-card-title">📋 去年同期 (YoY) 績效考核統計對比表</div>
+        </div>
+        <div class="table-responsive">
+          <table class="custom-table">
+            <thead>
+              <tr>
+                <th>軟體工程師</th>
+                <th>本期實得積分</th>
+                <th>去年同期積分</th>
+                <th>積分差額 (+/-)</th>
+                <th>成長率 (%)</th>
+                <th>專案量對比</th>
+                <th>本期分項明細 (智 / 非 / 維 / 傳)</th>
+              </tr>
+            </thead>
+            <tbody id="yoy-table-body">
+              <!-- 動態注入 YoY 表格 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分頁 3: 助理專屬審查中心 -->
+    <div id="pane-assistant_audit" class="tab-pane">
+      <div class="chart-card mb-4">
+        <div class="chart-card-header">
+          <div>
+            <div class="chart-card-title">📤 每月固定上傳資料審核面板</div>
+            <div class="chart-card-desc">工程師每月定期上傳資料，經助理審核核准後發放固定 0.2 分積分獎勵</div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="custom-table">
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th>軟體工程師</th>
+                <th>上傳日期</th>
+                <th>審核狀態</th>
+                <th>認列積分</th>
+                <th>審核人員與時間</th>
+                <th>助理操作</th>
+              </tr>
+            </thead>
+            <tbody id="assistant-upload-list">
+              <!-- 動態注入上傳審核 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分頁 4: Google Sheet 串接指南與安全設定 -->
+    <div id="pane-settings_guide" class="tab-pane">
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <div class="chart-card-title">🚀 Google Sheet 模式二 (Apps Script 免伺服器) 快速部署指南</div>
+        </div>
+        <div style="font-size: 0.9rem; line-height: 1.8; color: var(--text-muted);">
+          <p>本系統採用 <strong>模式二 (Google Apps Script Web App)</strong> 輕量直連架構，免伺服器維護成本，並在前端透過 <strong>Web Crypto API (AES-256 / SHA-256)</strong> 實施資料加密防護。</p>
+          <br>
+          <h4 style="color: var(--text-main); margin-bottom: 8px;">三分鐘部署步驟：</h4>
+          <ol style="padding-left: 20px;">
+            <li>在您的 Google Drive 建立一個新的 <strong>Google 試算表 (Google Sheet)</strong>。</li>
+            <li>在試算表選單點選 <strong>「擴充功能」 &gt; 「Apps Script」</strong>。</li>
+            <li>將專案根目錄下的 <code>googleAppsScript_Code.gs</code> 內容全部複製並貼入編輯器中，點選儲存。</li>
+            <li>點選右上角 <strong>「部署」 &gt; 「新的部署作業」</strong>。</li>
+            <li>類型選擇 <strong>「網頁應用程式 (Web App)」</strong>，設定：
+              <ul style="padding-left: 20px; margin-top: 4px;">
+                <li>執行身分：<strong>我 (您的 Google 帳號)</strong></li>
+                <li>誰可以存取：<strong>所有人 (Anyone)</strong></li>
+              </ul>
+            </li>
+            <li>完成部署後，複製產生的 <strong>Web App 網址</strong>。</li>
+            <li>點擊本系統右上角 <strong>⚙️ 設定按鈕</strong>，將網址貼上並儲存，系統即可立即雙向即時同步！</li>
+          </ol>
+          <br>
+          <div class="alert" style="background: var(--bg-surface-elevated); padding: 14px; border-radius: 8px; border: 1px solid var(--border-active);">
+            <strong style="color: var(--emerald);">🔒 前端資料庫加密說明：</strong>
+            傳輸時敏感商務報價、付出佔比與審核請求皆附帶雜湊防偽簽章與加密密鑰，防止中途竄改或竊聽。
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div> <!-- /app-container -->
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Modal 1: 新增專案 (助理與超級使用者專屬) -->
+  <div id="modal-add-project" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">➕ 新增考核專案</h3>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('modal-add-project').classList.remove('show')">&times;</button>
+      </div>
+      <form id="form-add-project">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="add-project-id">案編 *</label>
+              <input type="text" id="add-project-id" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label for="add-project-name">案名 *</label>
+              <input type="text" id="add-project-name" class="form-control" placeholder="例：信義綠能智慧大樓" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="add-drawing-id">圖編</label>
+              <input type="text" id="add-drawing-id" class="form-control" placeholder="例：DWG-108">
+            </div>
+            <div class="form-group">
+              <label for="add-integration">整合項目</label>
+              <input type="text" id="add-integration" class="form-control" placeholder="例：BA監控、門禁整合">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="add-receipt-date">收件日期</label>
+              <input type="date" id="add-receipt-date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="add-required-date">需求日期</label>
+              <input type="date" id="add-required-date" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="add-project-engineer">專案工程師 (硬體，不列考核)</label>
+              <input type="text" id="add-project-engineer" class="form-control" placeholder="例：陳專案">
+            </div>
+            <div class="form-group">
+              <label for="add-software-engineer">軟體工程師 (考核對象，可多位逗號隔開) *</label>
+              <input type="text" id="add-software-engineer" class="form-control" placeholder="例：林軟體, 李程式" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="add-project-type">專案類別</label>
+              <select id="add-project-type" class="form-control">
+                <option value="新案">一般新案</option>
+                <option value="維護專案">維護專案 (固定 1 案 1 分)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="add-is-smart">是否為智慧建築</label>
+              <select id="add-is-smart" class="form-control">
+                <option value="是">是 (智慧建築)</option>
+                <option value="否">否 (一般建築依戶數)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 智慧建築特有欄位 -->
+          <div id="smart-building-fields">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="add-smart-grade">智慧建築等級</label>
+                <select id="add-smart-grade" class="form-control">
+                  <option value="合格">合格 (係數 ×1.0)</option>
+                  <option value="銅">銅級 (係數 ×1.05)</option>
+                  <option value="銀">銀級 (係數 ×1.10)</option>
+                  <option value="黃金">黃金級 (係數 ×1.15)</option>
+                  <option value="鑽石">鑽石級 (係數 ×1.20)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="add-quote">報價金額 (元)</label>
+                <input type="number" id="add-quote" class="form-control" value="500000" min="0" step="10000">
+              </div>
+            </div>
+          </div>
+
+          <!-- 非智慧建築戶數欄位 -->
+          <div id="nonsmart-building-fields" style="display: none;">
+            <div class="form-group">
+              <label for="add-units">建築戶數 (&le;20: 4分, 21~50: 5分, 51~100: 6分, 101~200: 8分, 201以上: 10分)</label>
+              <input type="number" id="add-units" class="form-control" value="80" min="1">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="add-software-completion-date">軟體完成時間 (計分歸屬月份/年份)</label>
+              <input type="date" id="add-software-completion-date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="add-hardware-completion-date">硬體完成時間</label>
+              <input type="date" id="add-hardware-completion-date" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="add-status">專案狀態</label>
+              <select id="add-status" class="form-control">
+                <option value="進行中">進行中</option>
+                <option value="軟體完成">軟體完成</option>
+                <option value="已結案">已結案</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="add-completion-rate">專案完成比例 (%)</label>
+              <input type="number" id="add-completion-rate" class="form-control" value="100" min="0" max="100">
+            </div>
+          </div>
+
+          <!-- 即時動態算分預覽盒 -->
+          <div class="live-score-preview-box">
+            <div class="preview-title">⚡ 系統即時試算專案基準分</div>
+            <div id="add-live-score-preview" class="preview-score-large">57.5 分</div>
+            <div id="add-live-formula-preview" class="preview-formula-text">計算公式：(500,000 / 10000) × 1.15 = 57.5 分</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-add-project').classList.remove('show')">取消</button>
+          <button type="submit" class="btn btn-primary">確認新增專案</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: 主管填寫付出佔比 (主管專屬) -->
+  <div id="modal-ratio-editor" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">👔 主管填寫 · 多工程師付出佔比</h3>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('modal-ratio-editor').classList.remove('show')">&times;</button>
+      </div>
+      <form id="form-ratio-editor">
+        <div class="modal-body">
+          <input type="hidden" id="ratio-modal-project-id">
+          <div class="mb-3">
+            <div class="text-xs text-muted">專案資訊</div>
+            <h4 id="ratio-modal-project-title" class="font-bold text-main mt-1"></h4>
+            <div class="text-xs text-indigo mt-1">專案總基準分：<strong id="ratio-modal-base-score"></strong></div>
+          </div>
+
+          <div id="ratio-engineers-inputs">
+            <!-- 動態生成各工程師佔比滑桿與輸入框 -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-ratio-editor').classList.remove('show')">取消</button>
+          <button type="submit" class="btn btn-primary">儲存佔比設定</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2.5: 主管 / 超級使用者 修改指派軟體工程師 -->
+  <div id="modal-edit-engineers" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">👥 指派 / 修改專案軟體工程師</h3>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('modal-edit-engineers').classList.remove('show')">&times;</button>
+      </div>
+      <form id="form-edit-engineers">
+        <div class="modal-body">
+          <input type="hidden" id="edit-eng-modal-project-id">
+          <div class="mb-3">
+            <div class="text-xs text-muted">目前專案</div>
+            <h4 id="edit-eng-modal-project-title" class="font-bold text-main mt-1"></h4>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="edit-eng-input">軟體工程師名單 (以逗號隔開多位工程師) *</label>
+            <input type="text" id="edit-eng-input" class="form-control" placeholder="例：林軟體, 李程式, 張工程" required>
+            <span class="text-xs text-muted mt-1">💡 提示：輸入多位工程師後，系統將自動支援主管依付出貢獻調整佔比。</span>
+          </div>
+
+          <div class="form-group mb-3">
+            <label>快速選擇公司軟體工程師：</label>
+            <div id="quick-select-engineers" class="d-flex gap-2 mt-1" style="flex-wrap: wrap;">
+              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="林軟體">+ 林軟體</button>
+              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="李程式">+ 李程式</button>
+              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="張工程">+ 張工程</button>
+              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="王新創">+ 王新創</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-edit-engineers').classList.remove('show')">取消</button>
+          <button type="submit" class="btn btn-primary">儲存工程師名單</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: 助理審核專案完成比例 (助理專屬) -->
+  <div id="modal-completion-editor" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">📋 助理審核 · 專案完成進度</h3>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('modal-completion-editor').classList.remove('show')">&times;</button>
+      </div>
+      <form id="form-completion-editor">
+        <div class="modal-body">
+          <input type="hidden" id="comp-modal-project-id">
+          <div class="mb-3">
+            <div class="text-xs text-muted">審查專案</div>
+            <h4 id="comp-modal-project-title" class="font-bold text-main mt-1"></h4>
+          </div>
+
+          <div class="form-group mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label for="comp-rate-range">專案完成比例 (%)</label>
+              <span id="comp-rate-display" class="font-bold text-primary font-mono">100%</span>
+            </div>
+            <input type="range" id="comp-rate-range" min="0" max="100" step="5" class="form-control" style="cursor: pointer;">
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="comp-status-select">專案階段狀態</label>
+            <select id="comp-status-select" class="form-control">
+              <option value="進行中">進行中</option>
+              <option value="軟體完成">軟體完成</option>
+              <option value="已結案">已結案 (認列積分)</option>
+            </select>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="comp-software-date">軟體完成日期 (結案認列基準日)</label>
+            <input type="date" id="comp-software-date" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-completion-editor').classList.remove('show')">取消</button>
+          <button type="submit" class="btn btn-primary">確認審核進度</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 4: 系統與資安金鑰設定 -->
+  <div id="modal-settings" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ Google Sheet 串接與資安密鑰設定</h3>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('modal-settings').classList.remove('show')">&times;</button>
+      </div>
+      <form id="form-settings">
+        <div class="modal-body">
+          <div class="form-group mb-3">
+            <label for="settings-gas-url">Google Apps Script Web App 網址</label>
+            <input type="url" id="settings-gas-url" class="form-control" placeholder="https://script.google.com/macros/s/.../exec" value="https://script.google.com/macros/s/AKfycbzCzsj8H-v_S27hgeo7RVUodBNpvlgPHOgaGgZDtfAHDRbtRO00a0GqjlPZecAcrH5F/exec">
+            <span class="text-xs text-muted mt-1">請貼上從 Google Sheet「部署為網頁應用程式」取得的 URL。若未填寫則自動使用本機獨立安全資料庫。</span>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="settings-secret-key">資料庫傳輸安全加密金鑰 (Secret Key)</label>
+            <input type="text" id="settings-secret-key" class="form-control">
+            <span class="text-xs text-muted mt-1">前端透過 AES-256 與 SHA-256 簽署保護資料庫封包，需與 Apps Script 端金鑰一致。</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-settings').classList.remove('show')">關閉</button>
+          <button type="submit" class="btn btn-primary">儲存設定並同步</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 浮動 Toast 訊息容器 -->
+  <div id="toast-container"></div>
+
+  <!-- JS 模組載入 -->
+  <script src="js/crypto.js"></script>
+  <script src="js/calculator.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

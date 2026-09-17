@@ -1,0 +1,19 @@
+{
+  "name": "youdemei-kpi-system",
+  "version": "1.0.0",
+  "description": "優德美績效考核與專案積分管理系統 - Google Sheet 雲端加密同步版",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test_scoring.js"
+  },
+  "keywords": [
+    "kpi",
+    "performance-appraisal",
+    "google-sheets",
+    "smart-building",
+    "rbac"
+  ],
+  "author": "Antigravity",
+  "license": "MIT"
+}
