@@ -329,10 +329,13 @@
     <!-- 分頁 3: 助理專屬審查中心 -->
     <div id="pane-assistant_audit" class="tab-pane">
       <div class="chart-card mb-4">
-        <div class="chart-card-header">
+        <div class="chart-card-header d-flex justify-content-between align-items-center" style="flex-wrap: wrap; gap: 10px;">
           <div>
             <div class="chart-card-title">📤 每月固定上傳資料審核面板</div>
             <div class="chart-card-desc">工程師每月定期上傳資料，經助理審核核准後發放固定 0.2 分積分獎勵</div>
+          </div>
+          <div>
+            <button type="button" id="btn-open-add-upload" class="btn btn-sm btn-primary">➕ 登記/新增每月上傳</button>
           </div>
         </div>
         <div class="table-responsive">
@@ -639,6 +642,48 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-completion-editor').classList.remove('show')">取消</button>
           <button type="submit" class="btn btn-primary">確認審核進度</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3.5: 登記 / 新增每月上傳資料 -->
+  <div id="modal-add-upload" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">📤 登記 / 新增每月固定上傳資料</h3>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('modal-add-upload').classList.remove('show')">&times;</button>
+      </div>
+      <form id="form-add-upload">
+        <div class="modal-body">
+          <div class="form-group mb-3">
+            <label for="add-upload-year-month">考核年月 (YYYY-MM) *</label>
+            <input type="month" id="add-upload-year-month" class="form-control" required>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="add-upload-engineer">軟體工程師 *</label>
+            <select id="add-upload-engineer" class="form-control" required>
+              <!-- 動態由工程師清單填入 -->
+            </select>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="add-upload-date">實際檔案上傳日期</label>
+            <input type="date" id="add-upload-date" class="form-control" required>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="add-upload-status">審核狀態</label>
+            <select id="add-upload-status" class="form-control">
+              <option value="待審核">待審核 (尚不計分)</option>
+              <option value="審核通過" selected>審核通過 (認列 0.2 分)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-add-upload').classList.remove('show')">取消</button>
+          <button type="submit" id="btn-submit-add-upload" class="btn btn-primary">確認登記並同步</button>
         </div>
       </form>
     </div>

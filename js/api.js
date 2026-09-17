@@ -117,8 +117,18 @@
           var formatYMStr = function(v) {
             if (!v) return '';
             var str = String(v).trim();
-            if (str.length >= 7 && /^\d{4}-\d{2}/.test(str)) {
-              return str.substring(0, 7);
+            if (str.indexOf('T') !== -1) {
+              var d = new Date(str);
+              if (!isNaN(d.getTime())) {
+                var year = d.getFullYear();
+                var month = d.getMonth() + 1;
+                return year + '-' + (month < 10 ? '0' + month : month);
+              }
+            }
+            if (str.length >= 7 && /^\d{4}[-/]\d{1,2}/.test(str)) {
+              var parts = str.split(/[-/]/);
+              var m = parts[1].length === 1 ? ('0' + parts[1]) : parts[1].substring(0, 2);
+              return parts[0] + '-' + m;
             }
             return str;
           };
@@ -380,6 +390,15 @@
       }
 
       var secretKey = window.CryptoService.getSecretKey();
+      var getUrl = window.AppState.gasUrl + 
+        '?action=auditUpload' + 
+        '&yearMonth=' + encodeURIComponent(yearMonth) + 
+        '&engineer=' + encodeURIComponent(engineer) + 
+        '&auditStatus=' + encodeURIComponent(auditStatus) + 
+        '&auditor=' + encodeURIComponent(auditor || '助理') + 
+        '&authKey=' + encodeURIComponent(secretKey) + 
+        '&t=' + Date.now();
+
       var postPayload = {
         action: 'auditUpload',
         authKey: secretKey,
@@ -391,16 +410,90 @@
         }
       };
 
-      return fetch(window.AppState.gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(postPayload)
-      })
-      .then(function(res) { return res.json(); })
-      .catch(function(err) {
-        console.warn('[API] 助理審核雲端同步失敗：', err);
-        return { success: true, message: '已於本地更新' };
-      });
+      // 優先使用 GET 通訊以防止瀏覽器 302 重導向 CORS 封鎖
+      return fetch(getUrl)
+        .then(function(res) { return res.json(); })
+        .catch(function() {
+          return fetch(window.AppState.gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(postPayload)
+          }).then(function(res) { return res.json(); });
+        })
+        .catch(function(err) {
+          console.warn('[API] 助理審核雲端同步失敗：', err);
+          return { success: true, message: '已於本地更新 (雲端重試中)' };
+        });
+    },
+
+    // 4.5 登記 / 新增每月固定上傳資料
+    addUpload: function(yearMonth, engineer, uploadDate, auditStatus, auditor) {
+      var list = window.AppState.monthlyUploads;
+      var nowStr = uploadDate || new Date().toISOString().substring(0, 10);
+      var status = auditStatus || '待審核';
+      var score = (status === '審核通過') ? 0.2 : 0;
+      var found = list.find(function(u) { return u.yearMonth === yearMonth && u.engineer === engineer; });
+
+      if (found) {
+        found.uploadStatus = '已上傳';
+        found.uploadDate = nowStr;
+        found.auditStatus = status;
+        found.earnedScore = score;
+        if (auditor) found.auditor = auditor;
+      } else {
+        list.push({
+          yearMonth: yearMonth,
+          engineer: engineer,
+          uploadStatus: '已上傳',
+          uploadDate: nowStr,
+          auditStatus: status,
+          auditDate: (status === '審核通過' ? nowStr : ''),
+          auditor: auditor || '',
+          earnedScore: score
+        });
+      }
+      window.AppState.saveUploadsToLocal();
+
+      if (!ApiService.hasGasConfigured()) {
+        return Promise.resolve({ success: true, message: '上傳紀錄已儲存於本機' });
+      }
+
+      var secretKey = window.CryptoService.getSecretKey();
+      var getUrl = window.AppState.gasUrl + 
+        '?action=addUpload' + 
+        '&yearMonth=' + encodeURIComponent(yearMonth) + 
+        '&engineer=' + encodeURIComponent(engineer) + 
+        '&uploadDate=' + encodeURIComponent(nowStr) + 
+        '&auditStatus=' + encodeURIComponent(status) + 
+        '&auditor=' + encodeURIComponent(auditor || '') + 
+        '&authKey=' + encodeURIComponent(secretKey) + 
+        '&t=' + Date.now();
+
+      var postPayload = {
+        action: 'addUpload',
+        authKey: secretKey,
+        data: {
+          yearMonth: yearMonth,
+          engineer: engineer,
+          uploadDate: nowStr,
+          auditStatus: status,
+          auditor: auditor
+        }
+      };
+
+      return fetch(getUrl)
+        .then(function(res) { return res.json(); })
+        .catch(function() {
+          return fetch(window.AppState.gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(postPayload)
+          }).then(function(res) { return res.json(); });
+        })
+        .catch(function(err) {
+          console.warn('[API] 新增上傳紀錄雲端同步失敗：', err);
+          return { success: true, message: '已於本地更新 (待重試同步)' };
+        });
     },
 
     // 5. 助理審核專案完成比例及狀態

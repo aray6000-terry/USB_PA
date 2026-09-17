@@ -175,6 +175,17 @@
         completionForm.addEventListener('submit', App.handleSaveCompletion);
       }
 
+      // 登記每月上傳按鈕與表單
+      var btnOpenAddUpload = document.getElementById('btn-open-add-upload');
+      if (btnOpenAddUpload) {
+        btnOpenAddUpload.addEventListener('click', App.openAddUploadModal);
+      }
+
+      var formAddUpload = document.getElementById('form-add-upload');
+      if (formAddUpload) {
+        formAddUpload.addEventListener('submit', App.handleSubmitAddUpload);
+      }
+
       // 設定 Modal 相關
       var btnSettings = document.getElementById('btn-open-settings');
       if (btnSettings) {
@@ -541,11 +552,78 @@
 
     // 助理審核動作處理 (核准/退回)
     handleAuditUpload: function(yearMonth, engineer, status) {
-      var auditorName = window.AppState.currentUser.name;
+      var auditorName = window.AppState.currentUser ? window.AppState.currentUser.name : '助理';
       window.ApiService.auditUpload(yearMonth, engineer, status, auditorName).then(function(res) {
-        App.showToast(engineer + ' ' + yearMonth + ' 月度固定上傳審核已設定為：' + status);
+        App.showToast(res.message || (engineer + ' ' + yearMonth + ' 月度固定上傳審核已設定為：' + status));
         App.refreshView();
       });
+    },
+
+    // 開啟登記每月上傳 Modal
+    openAddUploadModal: function() {
+      var modal = document.getElementById('modal-add-upload');
+      if (!modal) return;
+
+      var now = new Date();
+      var y = now.getFullYear();
+      var m = now.getMonth() + 1;
+      var ymStr = y + '-' + (m < 10 ? '0' + m : m);
+      var nowStr = now.toISOString().substring(0, 10);
+
+      var ymInput = document.getElementById('add-upload-year-month');
+      var dateInput = document.getElementById('add-upload-date');
+      var engSelect = document.getElementById('add-upload-engineer');
+
+      if (ymInput) ymInput.value = ymStr;
+      if (dateInput) dateInput.value = nowStr;
+
+      if (engSelect) {
+        var engineers = window.AppState.getDistinctEngineers();
+        engSelect.innerHTML = engineers.map(function(eng) {
+          return '<option value="' + eng + '">' + eng + '</option>';
+        }).join('');
+      }
+
+      modal.classList.add('show');
+    },
+
+    // 提交登記每月上傳
+    handleSubmitAddUpload: function(e) {
+      e.preventDefault();
+      var ym = document.getElementById('add-upload-year-month').value.trim();
+      var eng = document.getElementById('add-upload-engineer').value.trim();
+      var uploadDate = document.getElementById('add-upload-date').value.trim();
+      var auditStatus = document.getElementById('add-upload-status').value.trim();
+      var auditorName = window.AppState.currentUser ? window.AppState.currentUser.name : '助理';
+
+      if (!ym || !eng) {
+        App.showToast('請完整填寫考核年月與工程師姓名');
+        return;
+      }
+
+      var submitBtn = document.getElementById('btn-submit-add-upload');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '同步中...';
+      }
+
+      window.ApiService.addUpload(ym, eng, uploadDate, auditStatus, auditorName)
+        .then(function(res) {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '確認登記並同步';
+          }
+          document.getElementById('modal-add-upload').classList.remove('show');
+          App.showToast(res.message || ('已成功登記 ' + eng + ' ' + ym + ' 上傳資料！'));
+          App.refreshView();
+        })
+        .catch(function(err) {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '確認登記並同步';
+          }
+          App.showToast('登記失敗：' + err.message);
+        });
     },
 
     // 主管填寫付出佔比 Modal

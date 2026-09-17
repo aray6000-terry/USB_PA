@@ -153,6 +153,16 @@ function doGet(e) {
       var passwordHash = (e && e.parameter && e.parameter.passwordHash) ? e.parameter.passwordHash : "";
       return handleLoginAuth(ss, username, passwordHash);
     }
+
+    // 支援以 GET 方式進行每月上傳審核
+    if (action === "auditUpload") {
+      return handleAuditUpload(ss, e.parameter.yearMonth, e.parameter.engineer, e.parameter.auditStatus, e.parameter.auditor);
+    }
+
+    // 支援以 GET 方式進行登記/新增每月上傳紀錄
+    if (action === "addUpload") {
+      return handleAddUpload(ss, e.parameter.yearMonth, e.parameter.engineer, e.parameter.uploadDate, e.parameter.auditStatus, e.parameter.auditor);
+    }
     
     var projectsData = sheetToObjects(ss.getSheetByName(SHEET_PROJECTS));
     var uploadsData = sheetToObjects(ss.getSheetByName(SHEET_UPLOADS));
@@ -278,32 +288,12 @@ function doPost(e) {
     
     if (action === "auditUpload") {
       // 助理 審核每月固定上傳資料 (0.2 分)
-      var uploadSheet = ss.getSheetByName(SHEET_UPLOADS);
-      var yearMonth = data.yearMonth;
-      var engineer = data.engineer;
-      var auditStatus = data.auditStatus; // "審核通過" 或 "退回"
-      var auditor = data.auditor || "助理";
-      
-      var rows = uploadSheet.getDataRange().getValues();
-      var found = false;
-      for (var i = 1; i < rows.length; i++) {
-        if (rows[i][0] == yearMonth && rows[i][1] == engineer) {
-          uploadSheet.getRange(i + 1, 5).setValue(auditStatus);
-          uploadSheet.getRange(i + 1, 6).setValue(Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd HH:mm"));
-          uploadSheet.getRange(i + 1, 7).setValue(auditor);
-          uploadSheet.getRange(i + 1, 8).setValue(auditStatus === "審核通過" ? 0.2 : 0);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        uploadSheet.appendRow([
-          yearMonth, engineer, "已上傳", Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd"),
-          auditStatus, Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd HH:mm"), auditor,
-          (auditStatus === "審核通過" ? 0.2 : 0)
-        ]);
-      }
-      return returnSuccess({ message: "每月上傳審核已完成" });
+      return handleAuditUpload(ss, data.yearMonth, data.engineer, data.auditStatus, data.auditor);
+    }
+
+    if (action === "addUpload") {
+      // 登記 / 新增每月上傳資料
+      return handleAddUpload(ss, data.yearMonth, data.engineer, data.uploadDate, data.auditStatus, data.auditor);
     }
     
     if (action === "updateCompletion") {
@@ -449,6 +439,134 @@ function returnError(msg) {
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/**
+ * 正規化年月份字串為 YYYY-MM 格式 (避免 Date 序列化跨時區月份位移)
+ */
+function normalizeYearMonth(val) {
+  if (!val) return "";
+  if (val instanceof Date || Object.prototype.toString.call(val) === "[object Date]") {
+    return Utilities.formatDate(val, "Asia/Taipei", "yyyy-MM");
+  }
+  var s = String(val).trim();
+  if (s.indexOf("T") !== -1) {
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return Utilities.formatDate(d, "Asia/Taipei", "yyyy-MM");
+    }
+  }
+  if (s.length >= 7 && /^\d{4}[-/]\d{1,2}/.test(s)) {
+    var parts = s.split(/[-/]/);
+    var y = parts[0];
+    var m = parts[1].length === 1 ? ("0" + parts[1]) : parts[1].substring(0, 2);
+    return y + "-" + m;
+  }
+  return s;
+}
+
+/**
+ * 處理 助理審核每月固定上傳資料 (0.2 分)
+ */
+function handleAuditUpload(ss, yearMonth, engineer, auditStatus, auditor) {
+  var uploadSheet = ss.getSheetByName(SHEET_UPLOADS);
+  if (!uploadSheet) return returnError("找不到每月上傳紀錄表");
+
+  var targetYM = normalizeYearMonth(yearMonth);
+  var targetEng = String(engineer || "").trim();
+  var status = String(auditStatus || "審核通過").trim();
+  var auditName = String(auditor || "助理").trim();
+  var score = (status === "審核通過") ? 0.2 : 0;
+  var nowTimeStr = Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd HH:mm");
+  var nowDateStr = Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd");
+
+  var rows = uploadSheet.getDataRange().getValues();
+  var found = false;
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowYM = normalizeYearMonth(rows[i][0]);
+    var rowEng = String(rows[i][1] || "").trim();
+
+    if (rowYM === targetYM && rowEng === targetEng) {
+      uploadSheet.getRange(i + 1, 5).setValue(status);
+      uploadSheet.getRange(i + 1, 6).setValue(nowTimeStr);
+      uploadSheet.getRange(i + 1, 7).setValue(auditName);
+      uploadSheet.getRange(i + 1, 8).setValue(score);
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    uploadSheet.appendRow([
+      targetYM, targetEng, "已上傳", nowDateStr,
+      status, nowTimeStr, auditName, score
+    ]);
+  }
+
+  return returnSuccess({
+    message: targetEng + " " + targetYM + " 月度固定上傳審核已更新為「" + status + "」",
+    yearMonth: targetYM,
+    engineer: targetEng,
+    auditStatus: status,
+    auditor: auditName,
+    earnedScore: score
+  });
+}
+
+/**
+ * 處理 登記 / 新增每月上傳資料
+ */
+function handleAddUpload(ss, yearMonth, engineer, uploadDate, auditStatus, auditor) {
+  var uploadSheet = ss.getSheetByName(SHEET_UPLOADS);
+  if (!uploadSheet) return returnError("找不到每月上傳紀錄表");
+
+  var targetYM = normalizeYearMonth(yearMonth);
+  var targetEng = String(engineer || "").trim();
+  var upDate = uploadDate ? Utilities.formatDate(new Date(uploadDate), "Asia/Taipei", "yyyy-MM-dd") : Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd");
+  var status = String(auditStatus || "待審核").trim();
+  var auditName = auditor ? String(auditor).trim() : "";
+  var score = (status === "審核通過") ? 0.2 : 0;
+  var auditTimeStr = (status === "審核通過") ? Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy-MM-dd HH:mm") : "";
+
+  var rows = uploadSheet.getDataRange().getValues();
+  var found = false;
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowYM = normalizeYearMonth(rows[i][0]);
+    var rowEng = String(rows[i][1] || "").trim();
+
+    if (rowYM === targetYM && rowEng === targetEng) {
+      uploadSheet.getRange(i + 1, 3).setValue("已上傳");
+      uploadSheet.getRange(i + 1, 4).setValue(upDate);
+      if (status !== "待審核") {
+        uploadSheet.getRange(i + 1, 5).setValue(status);
+        uploadSheet.getRange(i + 1, 6).setValue(auditTimeStr);
+        uploadSheet.getRange(i + 1, 7).setValue(auditName);
+        uploadSheet.getRange(i + 1, 8).setValue(score);
+      }
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    uploadSheet.appendRow([
+      targetYM, targetEng, "已上傳", upDate,
+      status, auditTimeStr, auditName, score
+    ]);
+  }
+
+  return returnSuccess({
+    message: "成功登記 " + targetEng + " " + targetYM + " 月份固定上傳紀錄",
+    yearMonth: targetYM,
+    engineer: targetEng,
+    uploadStatus: "已上傳",
+    uploadDate: upDate,
+    auditStatus: status,
+    auditor: auditName,
+    earnedScore: score
+  });
+}
+
 function sheetToObjects(sheet) {
   if (!sheet) return [];
   var data = sheet.getDataRange().getValues();
@@ -459,10 +577,14 @@ function sheetToObjects(sheet) {
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
       var val = data[i][j];
-      if (val instanceof Date) {
+      var headerName = String(headers[j] || "").trim();
+
+      if (headerName === "年月") {
+        val = normalizeYearMonth(val);
+      } else if (val instanceof Date || Object.prototype.toString.call(val) === "[object Date]") {
         val = Utilities.formatDate(val, "Asia/Taipei", "yyyy-MM-dd");
       }
-      obj[headers[j]] = val;
+      obj[headerName] = val;
     }
     result.push(obj);
   }
