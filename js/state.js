@@ -309,7 +309,7 @@
 
     // Google Sheet 連線狀態
     syncMode: 'cloud', // 'local' 或 'cloud'
-    gasUrl: localStorage.getItem('udm_gas_url') || 'https://script.google.com/macros/s/AKfycbwpo1Qet1NXUB2yLiqnuphiMQ5gw3qJE0dwIB66lrIA37zeJ6yl5NUiugadNwA9qT3l/exec',
+    gasUrl: localStorage.getItem('udm_gas_url') || 'https://script.google.com/macros/s/AKfycbz20hACtfqyKPF9tvq0A5sc1EMvU8fRxkUXLbi5d_LpXJIjqktSC9PzztC1DJdy67pc/exec',
     isSyncing: false,
     lastSyncTime: null,
 
@@ -317,7 +317,7 @@
     init: function() {
       // 確保具備預設 GAS URL
       if (!State.gasUrl) {
-        State.gasUrl = 'https://script.google.com/macros/s/AKfycbwpo1Qet1NXUB2yLiqnuphiMQ5gw3qJE0dwIB66lrIA37zeJ6yl5NUiugadNwA9qT3l/exec';
+        State.gasUrl = 'https://script.google.com/macros/s/AKfycbz20hACtfqyKPF9tvq0A5sc1EMvU8fRxkUXLbi5d_LpXJIjqktSC9PzztC1DJdy67pc/exec';
       }
 
       // 載入本地快取專案與上傳紀錄

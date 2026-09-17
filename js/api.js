@@ -42,6 +42,23 @@
         window.AppState.lastSyncTime = new Date();
 
         if (data.status === 'success' && data.projects) {
+          var formatDateStr = function(v) {
+            if (!v) return '';
+            var str = String(v).trim();
+            if (str.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(str)) {
+              return str.substring(0, 10);
+            }
+            return str;
+          };
+          var formatYMStr = function(v) {
+            if (!v) return '';
+            var str = String(v).trim();
+            if (str.length >= 7 && /^\d{4}-\d{2}/.test(str)) {
+              return str.substring(0, 7);
+            }
+            return str;
+          };
+
           // 正規化專案資料欄位
           var formattedProjects = data.projects.map(function(row) {
             return {
@@ -49,13 +66,13 @@
               projectName: row['案名'] || row.projectName,
               drawingId: row['圖編'] || row.drawingId,
               integrationItem: row['整合項目'] || row.integrationItem,
-              receiptDate: row['收件日期'] || row.receiptDate,
+              receiptDate: formatDateStr(row['收件日期'] || row.receiptDate),
               projectEngineer: row['專案工程師'] || row.projectEngineer,
-              requiredDate: row['需求日期'] || row.requiredDate,
+              requiredDate: formatDateStr(row['需求日期'] || row.requiredDate),
               softwareEngineer: row['軟體工程師'] || row.softwareEngineer,
               contributionRatio: row['主管填寫佔比'] || row.contributionRatio,
-              softwareCompletionDate: row['軟體完成時間'] || row.softwareCompletionDate,
-              hardwareCompletionDate: row['硬體完成時間'] || row.hardwareCompletionDate,
+              softwareCompletionDate: formatDateStr(row['軟體完成時間'] || row.softwareCompletionDate),
+              hardwareCompletionDate: formatDateStr(row['硬體完成時間'] || row.hardwareCompletionDate),
               isSmartBuilding: (row['是否為智慧建築'] === '是' || row.isSmartBuilding === true),
               smartGrade: row['智慧建築等級'] || row.smartGrade,
               units: parseInt(row['戶數'] || row.units, 10) || 0,
@@ -71,12 +88,12 @@
           if (data.uploads) {
             var formattedUploads = data.uploads.map(function(u) {
               return {
-                yearMonth: u['年月'] || u.yearMonth,
+                yearMonth: formatYMStr(u['年月'] || u.yearMonth),
                 engineer: u['軟體工程師'] || u.engineer,
                 uploadStatus: u['上傳狀態'] || u.uploadStatus,
-                uploadDate: u['上傳時間'] || u.uploadDate,
+                uploadDate: formatDateStr(u['上傳時間'] || u.uploadDate),
                 auditStatus: u['助理審核狀態'] || u.auditStatus,
-                auditDate: u['審核時間'] || u.auditDate,
+                auditDate: formatDateStr(u['審核時間'] || u.auditDate),
                 auditor: u['審核助理'] || u.auditor,
                 earnedScore: parseFloat(u['核可積分'] || u.earnedScore) || 0
               };
