@@ -20,33 +20,59 @@
         }
 
         var secretKey = window.CryptoService.getSecretKey();
-        var postPayload = {
-          action: 'login',
-          authKey: secretKey,
-          data: {
-            username: username,
-            passwordHash: pwdHash
-          },
-          timestamp: Date.now()
-        };
+        var getUrl = window.AppState.gasUrl + 
+          '?action=login' + 
+          '&username=' + encodeURIComponent(username) + 
+          '&passwordHash=' + encodeURIComponent(pwdHash) + 
+          '&authKey=' + encodeURIComponent(secretKey) + 
+          '&t=' + Date.now();
 
-        return fetch(window.AppState.gasUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(postPayload)
-        })
-        .then(function(res) { return res.json(); })
-        .then(function(resData) {
-          if (resData.status === 'success' && resData.data && resData.data.user) {
-            return { success: true, user: resData.data.user };
-          } else {
-            return { success: false, message: resData.message || '帳號或密碼錯誤' };
-          }
-        })
-        .catch(function(err) {
-          console.warn('[API] 雲端登入服務呼叫失敗，切換至本機備援驗證：', err);
-          return window.AppState.verifyLocalLogin(username, pwdHash);
-        });
+        // 優先使用 GET 驗證 (Google Apps Script Web App 對 GET 重導向具備 100% 完整 CORS 支援)
+        return fetch(getUrl)
+          .then(function(res) {
+            if (!res.ok) throw new Error('雲端連線回應狀態異常: ' + res.status);
+            return res.json();
+          })
+          .then(function(resData) {
+            if (resData.status === 'success' && resData.data && resData.data.user) {
+              return { success: true, user: resData.data.user };
+            } else if (resData.status === 'error') {
+              return { success: false, message: resData.message || '帳號或密碼錯誤' };
+            }
+
+            // 若後端為舊版 doGet (回傳專案清單而非登入回應)，切換至 POST 測試
+            throw new Error('需使用 POST 方式重試');
+          })
+          .catch(function(getErr) {
+            // POST 備援呼叫
+            var postPayload = {
+              action: 'login',
+              authKey: secretKey,
+              data: {
+                username: username,
+                passwordHash: pwdHash
+              },
+              timestamp: Date.now()
+            };
+
+            return fetch(window.AppState.gasUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify(postPayload)
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(resData) {
+              if (resData.status === 'success' && resData.data && resData.data.user) {
+                return { success: true, user: resData.data.user };
+              } else {
+                return { success: false, message: resData.message || '帳號或密碼錯誤' };
+              }
+            })
+            .catch(function(postErr) {
+              console.warn('[API] 雲端登入服務呼叫失敗，切換至本機備援驗證：', postErr);
+              return window.AppState.verifyLocalLogin(username, pwdHash);
+            });
+          });
       });
     },
 

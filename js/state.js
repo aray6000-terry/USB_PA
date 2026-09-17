@@ -14,7 +14,38 @@
       roleCode: 'admin',
       managedEngineers: ['*'],
       avatar: '👑',
-      pwdHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'
+      pwdHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' // admin123
+    },
+    {
+      id: 'tony6070591135@gmail.com',
+      username: 'tony6070591135@gmail.com',
+      name: '陳勃毅',
+      role: '主管',
+      roleCode: 'manager',
+      managedEngineers: ['廖國寓', '何瑋恩', '簡昕儀', '江嘉偉', '徐堉桉', '侯凱嚴', '傅秉和'],
+      avatar: '👔',
+      pwdHash: '49a0ac18e26df0b0724f5ac5837e436b336527485fc0a388f578913d6ee70e67' // mgr123
+    },
+    {
+      id: 'a0977001617@gmail.com',
+      username: 'a0977001617@gmail.com',
+      name: '蔡倢羚',
+      role: '助理',
+      roleCode: 'assistant',
+      managedEngineers: [],
+      avatar: '📋',
+      pwdHash: 'a78548d218b1450e8a5680033627e434b730c56cabffb8270291f0657c04c3c9' // ast123
+    },
+    {
+      id: 'taisan648@gmail.com',
+      username: 'taisan648@gmail.com',
+      name: '廖國寓',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '廖國寓',
+      managedEngineers: ['廖國寓'],
+      avatar: '💻',
+      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b' // eng123
     },
     {
       id: 'manager1',
@@ -24,7 +55,7 @@
       roleCode: 'manager',
       managedEngineers: ['林軟體', '李程式', '張工程'],
       avatar: '👔',
-      pwdHash: '49a0ac18e26df0b0724f5ac5837e436b336527485fc0a388f578913d6ee70e67'
+      pwdHash: '49a0ac18e26df0b0724f5ac5837e436b336527485fc0a388f578913d6ee70e67' // mgr123
     },
     {
       id: 'engineer1',
@@ -35,29 +66,7 @@
       engineerName: '林軟體',
       managedEngineers: ['林軟體'],
       avatar: '💻',
-      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b'
-    },
-    {
-      id: 'engineer2',
-      username: 'engineer2',
-      name: '李程式',
-      role: '工程師',
-      roleCode: 'engineer',
-      engineerName: '李程式',
-      managedEngineers: ['李程式'],
-      avatar: '💻',
-      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b'
-    },
-    {
-      id: 'engineer3',
-      username: 'engineer3',
-      name: '張工程',
-      role: '工程師',
-      roleCode: 'engineer',
-      engineerName: '張工程',
-      managedEngineers: ['張工程'],
-      avatar: '💻',
-      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b'
+      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b' // eng123
     },
     {
       id: 'assistant1',
@@ -67,7 +76,7 @@
       roleCode: 'assistant',
       managedEngineers: [],
       avatar: '📋',
-      pwdHash: 'a78548d218b1450e8a5680033627e434b730c56cabffb8270291f0657c04c3c9'
+      pwdHash: 'a78548d218b1450e8a5680033627e434b730c56cabffb8270291f0657c04c3c9' // ast123
     }
   ];
 
@@ -349,8 +358,10 @@
 
       var matched = State.users.find(function(u) {
         var uUser = (u.username || u.id || '').toLowerCase();
+        var uName = (u.name || '').toLowerCase();
         var uHash = (u.pwdHash || '').toLowerCase();
-        return (uUser === trimmedUser) && (uHash === trimmedHash);
+        var isUserMatch = (uUser === trimmedUser) || (uName && uName === trimmedUser);
+        return isUserMatch && (uHash === trimmedHash);
       });
 
       if (matched) {

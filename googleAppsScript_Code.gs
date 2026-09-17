@@ -145,6 +145,14 @@ function doGet(e) {
   try {
     initDatabase();
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "";
+
+    // 支援以 GET 方式進行安全登入 (避免瀏覽器對 POST 之 302 重導向觸發 CORS 封鎖)
+    if (action === "login") {
+      var username = (e && e.parameter && e.parameter.username) ? e.parameter.username : "";
+      var passwordHash = (e && e.parameter && e.parameter.passwordHash) ? e.parameter.passwordHash : "";
+      return handleLoginAuth(ss, username, passwordHash);
+    }
     
     var projectsData = sheetToObjects(ss.getSheetByName(SHEET_PROJECTS));
     var uploadsData = sheetToObjects(ss.getSheetByName(SHEET_UPLOADS));
@@ -200,65 +208,9 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
     if (action === "login") {
-      // 帳號密碼登入驗證 (以 SHA-256 加密核對 Google Sheet 人員權限表)
-      var userSheet = ss.getSheetByName(SHEET_USERS);
-      if (!userSheet) return returnError("找不到人員權限表");
-      var rows = userSheet.getDataRange().getValues();
-      var inputUser = String(data.username || "").trim();
-      var inputHash = String(data.passwordHash || "").trim().toLowerCase();
-
-      for (var i = 1; i < rows.length; i++) {
-        var rowUser = String(rows[i][0] || "").trim();
-        var rowName = String(rows[i][1] || "").trim();
-        var rowRole = String(rows[i][2] || "").trim();
-        var rowManaged = String(rows[i][3] || "").trim();
-        var rowPwd = String(rows[i][4] || "").trim();
-
-        if (rowUser.toLowerCase() === inputUser.toLowerCase()) {
-          var rowPwdHash = sha256Hex(rowPwd).toLowerCase();
-          // 比對：支援明文密碼之 SHA256 比對，或試算表內已直接填入 Hash
-          if (rowPwdHash === inputHash || rowPwd.toLowerCase() === inputHash) {
-            var roleCode = "engineer";
-            var avatar = "💻";
-            if (rowRole.indexOf("超級") !== -1 || rowRole.indexOf("admin") !== -1) {
-              roleCode = "admin";
-              avatar = "👑";
-            } else if (rowRole.indexOf("主管") !== -1) {
-              roleCode = "manager";
-              avatar = "👔";
-            } else if (rowRole.indexOf("助理") !== -1) {
-              roleCode = "assistant";
-              avatar = "📋";
-            }
-
-            var managed = [];
-            if (rowManaged === "全部" || rowManaged === "*") {
-              managed = ["*"];
-            } else if (rowManaged && rowManaged !== "無") {
-              managed = rowManaged.split(/[,，]/).map(function(s) { return s.trim(); }).filter(Boolean);
-            }
-
-            var userObj = {
-              id: rowUser,
-              username: rowUser,
-              name: rowName,
-              role: rowRole,
-              roleCode: roleCode,
-              engineerName: (roleCode === "engineer" ? rowName : (managed[0] || "")),
-              managedEngineers: managed,
-              avatar: avatar
-            };
-
-            return returnSuccess({
-              message: "登入成功",
-              user: userObj
-            });
-          } else {
-            return returnError("帳號或密碼錯誤");
-          }
-        }
-      }
-      return returnError("帳號或密碼錯誤");
+      var username = data.username || "";
+      var passwordHash = data.passwordHash || "";
+      return handleLoginAuth(ss, username, passwordHash);
     }
     
     if (action === "addProject") {
@@ -377,6 +329,111 @@ function doPost(e) {
     return returnError("未知的操作：" + action);
   } catch (err) {
     return returnError(err.toString());
+  }
+/**
+ * 處理人員登入驗證 (支援 帳號/Email 或 姓名，動態標題比對與 SHA-256 加密核對)
+ */
+function handleLoginAuth(ss, username, passwordHash) {
+  var userSheet = ss.getSheetByName(SHEET_USERS);
+  if (!userSheet) return returnError("找不到人員權限表，請執行 initDatabase");
+  var rows = userSheet.getDataRange().getValues();
+  if (rows.length <= 1) return returnError("人員權限表尚無任何人員資料");
+
+  var headers = rows[0].map(function(h) { return String(h || "").trim(); });
+  var idxUser = headers.indexOf("帳號");
+  var idxName = headers.indexOf("姓名");
+  var idxRole = headers.indexOf("角色");
+  var idxManaged = headers.indexOf("管轄工程師名單");
+  var idxPwd = headers.indexOf("密碼");
+
+  // 若欄位名稱不同則進行寬鬆模糊匹配
+  if (idxUser === -1) idxUser = 0;
+  if (idxName === -1) idxName = 1;
+  if (idxRole === -1) idxRole = 2;
+  if (idxManaged === -1) idxManaged = 3;
+  if (idxPwd === -1) {
+    for (var h = 0; h < headers.length; h++) {
+      if (/密碼|password|pwd/i.test(headers[h])) {
+        idxPwd = h;
+        break;
+      }
+    }
+  }
+  if (idxPwd === -1) idxPwd = 4; // 預設第 5 欄
+
+  var inputUser = String(username || "").trim().toLowerCase();
+  var inputHash = String(passwordHash || "").trim().toLowerCase();
+
+  var foundUserRow = null;
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowUser = String(rows[i][idxUser] || "").trim();
+    var rowName = String(rows[i][idxName] || "").trim();
+
+    // 支援以「帳號(Email/ID)」或「姓名」進行比對
+    if ((rowUser && rowUser.toLowerCase() === inputUser) || 
+        (rowName && rowName.toLowerCase() === inputUser)) {
+      foundUserRow = rows[i];
+      break;
+    }
+  }
+
+  if (!foundUserRow) {
+    return returnError("找不到此帳號或姓名：「" + username + "」，請確認 Google Sheet 人員權限表");
+  }
+
+  var rowUser = String(foundUserRow[idxUser] || "").trim();
+  var rowName = String(foundUserRow[idxName] || "").trim();
+  var rowRole = String(foundUserRow[idxRole] || "").trim();
+  var rowManaged = String(foundUserRow[idxManaged] || "").trim();
+  var rowPwd = String(foundUserRow[idxPwd] || "").trim();
+
+  // 若試算表此列尚未設定密碼
+  if (!rowPwd) {
+    return returnError("帳號「" + (rowName || rowUser) + "」於 Google Sheet 尚未填寫密碼，請在試算表「密碼」欄位設定。");
+  }
+
+  var rowPwdHash = sha256Hex(rowPwd).toLowerCase();
+
+  // 比對：明文密碼之 SHA256 比對，或試算表內已直接填入 Hash
+  if (rowPwdHash === inputHash || rowPwd.toLowerCase() === inputHash) {
+    var roleCode = "engineer";
+    var avatar = "💻";
+    if (rowRole.indexOf("超級") !== -1 || rowRole.toLowerCase().indexOf("admin") !== -1) {
+      roleCode = "admin";
+      avatar = "👑";
+    } else if (rowRole.indexOf("主管") !== -1) {
+      roleCode = "manager";
+      avatar = "👔";
+    } else if (rowRole.indexOf("助理") !== -1) {
+      roleCode = "assistant";
+      avatar = "📋";
+    }
+
+    var managed = [];
+    if (rowManaged === "全部" || rowManaged === "*") {
+      managed = ["*"];
+    } else if (rowManaged && rowManaged !== "無") {
+      managed = rowManaged.split(/[,，]/).map(function(s) { return s.trim(); }).filter(Boolean);
+    }
+
+    var userObj = {
+      id: rowUser,
+      username: rowUser,
+      name: rowName,
+      role: rowRole,
+      roleCode: roleCode,
+      engineerName: (roleCode === "engineer" ? rowName : (managed[0] || "")),
+      managedEngineers: managed,
+      avatar: avatar
+    };
+
+    return returnSuccess({
+      message: "登入成功",
+      user: userObj
+    });
+  } else {
+    return returnError("密碼錯誤，請重新輸入");
   }
 }
 
