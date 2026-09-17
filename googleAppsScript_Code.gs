@@ -330,6 +330,8 @@ function doPost(e) {
   } catch (err) {
     return returnError(err.toString());
   }
+}
+
 /**
  * 處理人員登入驗證 (支援 帳號/Email 或 姓名，動態標題比對與 SHA-256 加密核對)
  */
