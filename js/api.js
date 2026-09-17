@@ -102,7 +102,58 @@
             window.AppState.saveUploadsToLocal();
           }
 
-          return { projects: formattedProjects, uploads: window.AppState.monthlyUploads };
+          if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+            var formattedUsers = data.users.map(function(u) {
+              var role = u['角色'] || u.role || '工程師';
+              var roleCode = 'engineer';
+              var avatar = '💻';
+              if (role.indexOf('超級') !== -1 || role.indexOf('admin') !== -1) {
+                roleCode = 'admin';
+                avatar = '👑';
+              } else if (role.indexOf('主管') !== -1) {
+                roleCode = 'manager';
+                avatar = '👔';
+              } else if (role.indexOf('助理') !== -1) {
+                roleCode = 'assistant';
+                avatar = '📋';
+              }
+
+              var managed = [];
+              var managedStr = u['管轄工程師名單'] || u.managedEngineers || '';
+              if (managedStr === '全部' || managedStr === '*') {
+                managed = ['*'];
+              } else if (managedStr && managedStr !== '無') {
+                managed = managedStr.split(/[,，]/).map(function(s) { return s.trim(); }).filter(Boolean);
+              }
+
+              var uname = u['帳號'] || u.id || u.username;
+              var displayName = u['姓名'] || u.name || uname;
+              return {
+                id: uname,
+                username: uname,
+                name: displayName,
+                role: role,
+                roleCode: roleCode,
+                engineerName: (roleCode === 'engineer' ? displayName : (managed[0] || '')),
+                managedEngineers: managed,
+                avatar: avatar,
+                password: (u['密碼'] || u.password || '').toString()
+              };
+            });
+
+            window.AppState.users = formattedUsers;
+            localStorage.setItem('udm_users', JSON.stringify(formattedUsers));
+
+            if (window.AppState.currentUser) {
+              var currentId = window.AppState.currentUser.id;
+              var updatedCurrent = formattedUsers.find(function(fu) { return fu.id === currentId; });
+              if (updatedCurrent) {
+                window.AppState.currentUser = updatedCurrent;
+              }
+            }
+          }
+
+          return { projects: formattedProjects, uploads: window.AppState.monthlyUploads, users: window.AppState.users };
         } else {
           throw new Error(data.message || '資料庫格式解析失敗');
         }

@@ -11,9 +11,16 @@
       window.AppState.init();
       App.setupEventListeners();
       App.setupTheme();
-      App.renderUserRoleUI();
-      App.populateFilterDropdowns();
-      App.refreshView();
+
+      // 檢查是否已登入
+      if (!window.AppState.isLoggedIn()) {
+        App.renderUserRoleUI();
+        App.openLoginModal();
+      } else {
+        App.renderUserRoleUI();
+        App.populateFilterDropdowns();
+        App.refreshView();
+      }
 
       // 初次啟動嘗試同步 (若有設定 GAS URL)
       if (window.ApiService.hasGasConfigured()) {
@@ -52,15 +59,41 @@
       var themeBtn = document.getElementById('btn-toggle-theme');
       if (themeBtn) themeBtn.addEventListener('click', App.toggleTheme);
 
-      // 角色切換
-      var roleSelect = document.getElementById('select-user-role');
-      if (roleSelect) {
-        roleSelect.addEventListener('change', function(e) {
+      // 登入表單提交
+      var loginForm = document.getElementById('form-login');
+      if (loginForm) loginForm.addEventListener('submit', App.handleLogin);
+
+      // 快速登入測試帳號按鈕
+      document.querySelectorAll('.quick-login-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          var user = e.currentTarget.getAttribute('data-user');
+          var pwd = e.currentTarget.getAttribute('data-pwd');
+          var uInput = document.getElementById('login-username');
+          var pInput = document.getElementById('login-password');
+          if (uInput) uInput.value = user;
+          if (pInput) pInput.value = pwd;
+          var errBox = document.getElementById('login-error-alert');
+          if (errBox) errBox.style.display = 'none';
+        });
+      });
+
+      // 登出按鈕
+      var btnLogout = document.getElementById('btn-logout');
+      if (btnLogout) btnLogout.addEventListener('click', App.handleLogout);
+
+      // 登入開啟按鈕
+      var btnLoginOpen = document.getElementById('btn-login-open');
+      if (btnLoginOpen) btnLoginOpen.addEventListener('click', App.openLoginModal);
+
+      // 超級管理員模擬切換視角
+      var impersonateSelect = document.getElementById('select-impersonate-role');
+      if (impersonateSelect) {
+        impersonateSelect.addEventListener('change', function(e) {
           window.AppState.setCurrentUser(e.target.value);
           App.renderUserRoleUI();
           App.populateFilterDropdowns();
           App.refreshView();
-          App.showToast('已切換身份為：' + window.AppState.currentUser.name + ' (' + window.AppState.currentUser.role + ')');
+          App.showToast('已切換視角為：' + window.AppState.currentUser.name + ' (' + window.AppState.currentUser.role + ')');
         });
       }
 
@@ -185,25 +218,52 @@
       var roleBadge = document.getElementById('current-role-badge');
       var userAvatar = document.getElementById('current-user-avatar');
       var userName = document.getElementById('current-user-name');
+      var btnLogout = document.getElementById('btn-logout');
+      var btnLoginOpen = document.getElementById('btn-login-open');
+      var adminSwitch = document.getElementById('admin-switch-wrapper');
+      var btnAdd = document.getElementById('btn-open-add-project');
+
+      if (!user) {
+        if (roleBadge) {
+          roleBadge.textContent = '訪客';
+          roleBadge.className = 'badge badge-role';
+        }
+        if (userAvatar) userAvatar.textContent = '👤';
+        if (userName) userName.textContent = '未登入';
+        if (btnLogout) btnLogout.style.display = 'none';
+        if (btnLoginOpen) btnLoginOpen.style.display = 'inline-block';
+        if (adminSwitch) adminSwitch.style.display = 'none';
+        if (btnAdd) btnAdd.style.display = 'none';
+        return;
+      }
+
+      if (btnLogout) btnLogout.style.display = 'inline-block';
+      if (btnLoginOpen) btnLoginOpen.style.display = 'none';
 
       if (roleBadge) {
         roleBadge.textContent = user.role;
         roleBadge.className = 'badge badge-role badge-' + user.roleCode;
       }
-      if (userAvatar) userAvatar.textContent = user.avatar;
+      if (userAvatar) userAvatar.textContent = user.avatar || '👤';
       if (userName) userName.textContent = user.name;
 
+      // 若為管理員帳號，開放模擬切換視角功能
+      if (adminSwitch) {
+        var isAdmin = (user.roleCode === 'admin' || user.id === 'admin');
+        adminSwitch.style.display = isAdmin ? 'inline-block' : 'none';
+        var impSelect = document.getElementById('select-impersonate-role');
+        if (impSelect) impSelect.value = user.id;
+      }
+
       // 根據 RBAC 權限控制元件可見性
-      var btnAdd = document.getElementById('btn-open-add-project');
       if (btnAdd) {
-        // 主管、助理與超級使用者皆可新增專案
+        // 主管、助理與超級使用者皆可新增專案；工程師身分隱藏
         var canAdd = (user.roleCode === 'assistant' || user.roleCode === 'admin' || user.roleCode === 'manager');
         btnAdd.style.display = canAdd ? 'inline-flex' : 'none';
       }
 
       var assistantTab = document.getElementById('tab-assistant-audit');
       if (assistantTab) {
-        // 助理中心標記
         if (user.roleCode === 'assistant') {
           assistantTab.classList.add('highlight-tab');
         } else {
@@ -217,6 +277,13 @@
       var filterEng = document.getElementById('filter-engineer');
       if (!filterEng) return;
 
+      var user = window.AppState.currentUser;
+      if (!user) {
+        filterEng.innerHTML = '<option value="ALL">請先登入系統</option>';
+        filterEng.disabled = true;
+        return;
+      }
+
       var visibleEngs = window.AppState.getVisibleEngineers();
       var currentVal = window.AppState.filterEngineer;
 
@@ -227,8 +294,8 @@
       filterEng.innerHTML = html;
 
       // 若為工程師身分，鎖定只能選自己
-      if (window.AppState.currentUser.roleCode === 'engineer') {
-        filterEng.value = window.AppState.currentUser.engineerName;
+      if (user.roleCode === 'engineer') {
+        filterEng.value = user.engineerName;
         filterEng.disabled = true;
       } else {
         filterEng.disabled = false;
@@ -238,6 +305,14 @@
     // 核心資料更新與畫面重繪
     refreshView: function() {
       var user = window.AppState.currentUser;
+      if (!user) {
+        var tableBody = document.getElementById('projects-table-body');
+        if (tableBody) {
+          tableBody.innerHTML = '<tr><td colspan="12" class="text-center py-5 text-muted">🔒 請先登入系統以檢視績效考核與專案資料</td></tr>';
+        }
+        return;
+      }
+
       var projects = window.AppState.projects;
       var uploads = window.AppState.monthlyUploads;
       var period = window.AppState.filterPeriod;
@@ -777,6 +852,55 @@
         App.showToast(data.warning ? ('注意：' + data.warning) : 'Google Sheet 資料庫已同步完成！');
         App.refreshView();
       });
+    },
+
+    // 登入驗證相關
+    openLoginModal: function() {
+      var modal = document.getElementById('modal-login');
+      if (modal) {
+        modal.classList.add('show');
+        var errBox = document.getElementById('login-error-alert');
+        if (errBox) errBox.style.display = 'none';
+        var userInput = document.getElementById('login-username');
+        if (userInput) userInput.focus();
+      }
+    },
+
+    closeLoginModal: function() {
+      var modal = document.getElementById('modal-login');
+      if (modal) modal.classList.remove('show');
+    },
+
+    handleLogin: function(e) {
+      e.preventDefault();
+      var username = document.getElementById('login-username').value;
+      var password = document.getElementById('login-password').value;
+      var errBox = document.getElementById('login-error-alert');
+
+      var res = window.AppState.login(username, password);
+      if (res.success) {
+        if (errBox) errBox.style.display = 'none';
+        App.closeLoginModal();
+        document.getElementById('login-password').value = '';
+        App.renderUserRoleUI();
+        App.populateFilterDropdowns();
+        App.refreshView();
+        App.showToast('🎉 歡迎回來，' + res.user.name + ' (' + res.user.role + ')！');
+      } else {
+        if (errBox) {
+          errBox.textContent = '❌ ' + (res.message || '登入失敗，請檢查帳號密碼。');
+          errBox.style.display = 'block';
+        }
+      }
+    },
+
+    handleLogout: function() {
+      window.AppState.logout();
+      App.renderUserRoleUI();
+      App.populateFilterDropdowns();
+      App.refreshView();
+      App.openLoginModal();
+      App.showToast('已安全登出系統。');
     },
 
     // 設定 Modal 相關

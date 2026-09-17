@@ -8,54 +8,66 @@
   var DEFAULT_USERS = [
     {
       id: 'admin',
-      name: '林總 (超級使用者)',
+      username: 'admin',
+      name: '超級管理員',
       role: '超級使用者',
       roleCode: 'admin',
       managedEngineers: ['*'],
-      avatar: '👑'
+      avatar: '👑',
+      password: 'admin123'
     },
     {
       id: 'manager1',
+      username: 'manager1',
       name: '王主管',
       role: '主管',
       roleCode: 'manager',
       managedEngineers: ['林軟體', '李程式', '張工程'],
-      avatar: '👔'
+      avatar: '👔',
+      password: 'mgr123'
     },
     {
-      id: 'eng_lin',
+      id: 'engineer1',
+      username: 'engineer1',
       name: '林軟體',
       role: '工程師',
       roleCode: 'engineer',
       engineerName: '林軟體',
       managedEngineers: ['林軟體'],
-      avatar: '💻'
+      avatar: '💻',
+      password: 'eng123'
     },
     {
-      id: 'eng_lee',
+      id: 'engineer2',
+      username: 'engineer2',
       name: '李程式',
       role: '工程師',
       roleCode: 'engineer',
       engineerName: '李程式',
       managedEngineers: ['李程式'],
-      avatar: '💻'
+      avatar: '💻',
+      password: 'eng123'
     },
     {
-      id: 'eng_chang',
+      id: 'engineer3',
+      username: 'engineer3',
       name: '張工程',
       role: '工程師',
       roleCode: 'engineer',
       engineerName: '張工程',
       managedEngineers: ['張工程'],
-      avatar: '💻'
+      avatar: '💻',
+      password: 'eng123'
     },
     {
       id: 'assistant1',
+      username: 'assistant1',
       name: '陳助理',
       role: '助理',
       roleCode: 'assistant',
       managedEngineers: [],
-      avatar: '📋'
+      avatar: '📋',
+      password: 'ast123'
     }
   ];
 
@@ -295,7 +307,7 @@
 
   var State = {
     users: DEFAULT_USERS,
-    currentUser: DEFAULT_USERS[0], // 預設超級使用者
+    currentUser: null, // 登入後之使用者物件 (未登入為 null)
     projects: [],
     monthlyUploads: [],
     
@@ -313,11 +325,78 @@
     isSyncing: false,
     lastSyncTime: null,
 
+    // 檢查是否已登入
+    isLoggedIn: function() {
+      return !!State.currentUser;
+    },
+
+    // 使用者登入驗證
+    login: function(username, password) {
+      var trimmedUser = (username || '').trim();
+      var trimmedPwd = (password || '').trim();
+
+      var matched = State.users.find(function(u) {
+        return (u.username === trimmedUser || u.id === trimmedUser) && (u.password === trimmedPwd);
+      });
+
+      if (matched) {
+        State.currentUser = matched;
+        localStorage.setItem('udm_current_user_id', matched.id);
+
+        if (matched.roleCode === 'engineer') {
+          State.filterEngineer = matched.engineerName;
+        } else {
+          State.filterEngineer = 'ALL';
+        }
+        return { success: true, user: matched };
+      }
+
+      return { success: false, message: '帳號或密碼錯誤，請確認後重試。' };
+    },
+
+    // 登出
+    logout: function() {
+      State.currentUser = null;
+      localStorage.removeItem('udm_current_user_id');
+      State.filterEngineer = 'ALL';
+    },
+
     // 初始化狀態
     init: function() {
       // 確保具備預設 GAS URL
       if (!State.gasUrl) {
         State.gasUrl = 'https://script.google.com/macros/s/AKfycbz20hACtfqyKPF9tvq0A5sc1EMvU8fRxkUXLbi5d_LpXJIjqktSC9PzztC1DJdy67pc/exec';
+      }
+
+      // 載入同步快取的使用者清單
+      var cachedUsers = localStorage.getItem('udm_users');
+      if (cachedUsers) {
+        try {
+          var parsedUsers = JSON.parse(cachedUsers);
+          if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+            State.users = parsedUsers;
+          }
+        } catch(e) {
+          State.users = DEFAULT_USERS;
+        }
+      }
+
+      // 檢查持久化登入狀態
+      var savedUserId = localStorage.getItem('udm_current_user_id');
+      if (savedUserId) {
+        var foundUser = State.users.find(function(u) {
+          return u.id === savedUserId || u.username === savedUserId;
+        });
+        if (foundUser) {
+          State.currentUser = foundUser;
+          if (foundUser.roleCode === 'engineer') {
+            State.filterEngineer = foundUser.engineerName;
+          }
+        } else {
+          State.currentUser = null;
+        }
+      } else {
+        State.currentUser = null;
       }
 
       // 載入本地快取專案與上傳紀錄
@@ -346,11 +425,12 @@
       localStorage.setItem('udm_uploads', JSON.stringify(State.monthlyUploads));
     },
 
-    // 切換登入角色
+    // 切換登入角色 (供管理員模擬視角)
     setCurrentUser: function(userId) {
-      var found = State.users.find(function(u) { return u.id === userId; });
+      var found = State.users.find(function(u) { return u.id === userId || u.username === userId; });
       if (found) {
         State.currentUser = found;
+        localStorage.setItem('udm_current_user_id', found.id);
         // 若為工程師，自動鎖定工程師篩選條件
         if (found.roleCode === 'engineer') {
           State.filterEngineer = found.engineerName;
@@ -365,6 +445,8 @@
     // 取得當前角色可見的工程師清單
     getVisibleEngineers: function() {
       var allSoftwareEngs = ['林軟體', '李程式', '張工程'];
+      if (!State.currentUser) return [];
+
       if (State.currentUser.roleCode === 'admin') {
         return allSoftwareEngs;
       }
@@ -382,6 +464,7 @@
 
     // 取得當前角色可見的專案清單
     getVisibleProjects: function() {
+      if (!State.currentUser) return [];
       var list = State.projects;
       var role = State.currentUser.roleCode;
 

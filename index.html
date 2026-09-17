@@ -32,18 +32,30 @@
           <span class="status-dot blue"></span> 本地安全沙盒模式
         </div>
 
-        <!-- 角色切換面板 (展示與測試用) -->
-        <div class="role-switcher-box" title="切換不同權限角色視角">
+        <!-- 使用者登入資訊與權限狀態 -->
+        <div id="user-profile-box" class="user-profile-box">
           <span id="current-user-avatar" class="user-avatar-icon">👑</span>
-          <select id="select-user-role">
-            <option value="admin">1. 超級使用者 (全域總覽)</option>
-            <option value="manager1">2. 主管 (王主管 - 填寫付出佔比)</option>
-            <option value="eng_lin">3. 工程師 (林軟體 - 個人績效)</option>
-            <option value="eng_lee">3. 工程師 (李程式 - 個人績效)</option>
-            <option value="eng_chang">3. 工程師 (張工程 - 個人績效)</option>
-            <option value="assistant1">4. 助理 (陳助理 - 審核與新增專案)</option>
-          </select>
-          <span id="current-role-badge" class="badge badge-role badge-admin">超級使用者</span>
+          <div class="user-profile-details">
+            <span id="current-user-name" class="user-display-name">超級管理員</span>
+            <span id="current-role-badge" class="badge badge-role badge-admin">超級使用者</span>
+          </div>
+          <!-- 管理員專屬：模擬切換不同視角選單 (僅 admin 可見) -->
+          <div id="admin-switch-wrapper" class="admin-switch-wrapper" style="display: none;" title="超級管理員專屬：切換視角預覽">
+            <select id="select-impersonate-role" class="admin-view-select">
+              <option value="admin">👑 超級使用者 (全域視角)</option>
+              <option value="manager1">👔 模擬：王主管視角</option>
+              <option value="engineer1">💻 模擬：林軟體視角</option>
+              <option value="engineer2">💻 模擬：李程式視角</option>
+              <option value="engineer3">💻 模擬：張工程視角</option>
+              <option value="assistant1">📋 模擬：陳助理視角</option>
+            </select>
+          </div>
+          <button id="btn-logout" class="btn btn-xs btn-outline-danger" title="登出當前帳號">
+            🚪 登出
+          </button>
+          <button id="btn-login-open" class="btn btn-xs btn-primary" style="display: none;" title="登入系統">
+            🔐 登入
+          </button>
         </div>
 
         <!-- 同步 Google Sheet 按鈕 -->
@@ -656,6 +668,47 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-settings').classList.remove('show')">關閉</button>
           <button type="submit" class="btn btn-primary">儲存設定並同步</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 0: 系統安全登入驗證 -->
+  <div id="modal-login" class="modal-overlay login-overlay">
+    <div class="modal-dialog login-dialog">
+      <div class="login-header-block text-center">
+        <div class="login-brand-icon">🏢</div>
+        <h2 class="login-title">優德美科技</h2>
+        <p class="login-subtitle">軟體工程師績效考核與專案積分管理系統</p>
+      </div>
+
+      <form id="form-login" class="login-form">
+        <div id="login-error-alert" class="login-alert-error" style="display: none;"></div>
+
+        <div class="form-group mb-3">
+          <label for="login-username">人員帳號</label>
+          <input type="text" id="login-username" class="form-control" placeholder="請輸入帳號 (例：admin, manager1, engineer1)" required autocomplete="username">
+        </div>
+
+        <div class="form-group mb-3">
+          <label for="login-password">登入密碼</label>
+          <input type="password" id="login-password" class="form-control" placeholder="請輸入密碼" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" id="btn-submit-login" class="btn btn-primary w-100" style="padding: 10px; font-weight: 700; margin-top: 8px;">
+          🔐 登入系統
+        </button>
+
+        <div class="quick-login-box mt-3 pt-3" style="border-top: 1px solid var(--border-subtle);">
+          <div class="text-xs text-muted mb-2 font-bold">⚡ 快速體驗測試帳號 (點擊自動帶入)：</div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-xs btn-outline-secondary quick-login-btn" data-user="admin" data-pwd="admin123">👑 超級管理員</button>
+            <button type="button" class="btn btn-xs btn-outline-secondary quick-login-btn" data-user="manager1" data-pwd="mgr123">👔 王主管</button>
+            <button type="button" class="btn btn-xs btn-outline-secondary quick-login-btn" data-user="engineer1" data-pwd="eng123">💻 林軟體</button>
+            <button type="button" class="btn btn-xs btn-outline-secondary quick-login-btn" data-user="engineer2" data-pwd="eng123">💻 李程式</button>
+            <button type="button" class="btn btn-xs btn-outline-secondary quick-login-btn" data-user="assistant1" data-pwd="ast123">📋 陳助理</button>
+          </div>
+          <div class="text-xs text-muted mt-2">💡 支援 Google Sheet「人員權限表」帳密動態同步。</div>
         </div>
       </form>
     </div>
