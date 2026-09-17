@@ -20,11 +20,11 @@
         App.renderUserRoleUI();
         App.populateFilterDropdowns();
         App.refreshView();
-      }
 
-      // 初次啟動嘗試同步 (若有設定 GAS URL)
-      if (window.ApiService.hasGasConfigured()) {
-        App.handleSyncData();
+        // 僅在登入後同步試算表資料
+        if (window.ApiService.hasGasConfigured()) {
+          App.handleSyncData();
+        }
       }
     },
 
@@ -62,20 +62,6 @@
       // 登入表單提交
       var loginForm = document.getElementById('form-login');
       if (loginForm) loginForm.addEventListener('submit', App.handleLogin);
-
-      // 快速登入測試帳號按鈕
-      document.querySelectorAll('.quick-login-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-          var user = e.currentTarget.getAttribute('data-user');
-          var pwd = e.currentTarget.getAttribute('data-pwd');
-          var uInput = document.getElementById('login-username');
-          var pInput = document.getElementById('login-password');
-          if (uInput) uInput.value = user;
-          if (pInput) pInput.value = pwd;
-          var errBox = document.getElementById('login-error-alert');
-          if (errBox) errBox.style.display = 'none';
-        });
-      });
 
       // 登出按鈕
       var btnLogout = document.getElementById('btn-logout');
@@ -873,29 +859,70 @@
 
     handleLogin: function(e) {
       e.preventDefault();
-      var username = document.getElementById('login-username').value;
+      var username = (document.getElementById('login-username').value || '').trim();
       var password = document.getElementById('login-password').value;
       var errBox = document.getElementById('login-error-alert');
+      var submitBtn = document.getElementById('btn-submit-login');
 
-      var res = window.AppState.login(username, password);
-      if (res.success) {
-        if (errBox) errBox.style.display = 'none';
-        App.closeLoginModal();
-        document.getElementById('login-password').value = '';
-        App.renderUserRoleUI();
-        App.populateFilterDropdowns();
-        App.refreshView();
-        App.showToast('🎉 歡迎回來，' + res.user.name + ' (' + res.user.role + ')！');
-      } else {
+      if (!username || !password) {
         if (errBox) {
-          errBox.textContent = '❌ ' + (res.message || '登入失敗，請檢查帳號密碼。');
+          errBox.textContent = '請輸入人員帳號與密碼';
           errBox.style.display = 'block';
         }
+        return;
       }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '🔐 驗證中...';
+      }
+
+      window.ApiService.login(username, password)
+        .then(function(res) {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🔐 安全登入';
+          }
+
+          if (res.success && res.user) {
+            if (errBox) errBox.style.display = 'none';
+            window.AppState.setAuthenticatedUser(res.user);
+            App.closeLoginModal();
+            document.getElementById('login-password').value = '';
+
+            App.renderUserRoleUI();
+            App.populateFilterDropdowns();
+            App.showToast('🎉 歡迎回來，' + res.user.name + ' (' + res.user.role + ')！');
+
+            // 登入成功後，即刻從後端載入該角色專案與資料
+            if (window.ApiService.hasGasConfigured()) {
+              App.handleSyncData();
+            } else {
+              App.refreshView();
+            }
+          } else {
+            if (errBox) {
+              errBox.textContent = '❌ ' + (res.message || '帳號或密碼錯誤');
+              errBox.style.display = 'block';
+            }
+          }
+        })
+        .catch(function(err) {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🔐 安全登入';
+          }
+          if (errBox) {
+            errBox.textContent = '❌ 登入驗證失敗：' + err.message;
+            errBox.style.display = 'block';
+          }
+        });
     },
 
     handleLogout: function() {
       window.AppState.logout();
+      window.AppState.projects = [];
+      window.AppState.monthlyUploads = [];
       App.renderUserRoleUI();
       App.populateFilterDropdowns();
       App.refreshView();

@@ -14,7 +14,7 @@
       roleCode: 'admin',
       managedEngineers: ['*'],
       avatar: '👑',
-      password: 'admin123'
+      pwdHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'
     },
     {
       id: 'manager1',
@@ -24,7 +24,7 @@
       roleCode: 'manager',
       managedEngineers: ['林軟體', '李程式', '張工程'],
       avatar: '👔',
-      password: 'mgr123'
+      pwdHash: '49a0ac18e26df0b0724f5ac5837e436b336527485fc0a388f578913d6ee70e67'
     },
     {
       id: 'engineer1',
@@ -35,7 +35,7 @@
       engineerName: '林軟體',
       managedEngineers: ['林軟體'],
       avatar: '💻',
-      password: 'eng123'
+      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b'
     },
     {
       id: 'engineer2',
@@ -46,7 +46,7 @@
       engineerName: '李程式',
       managedEngineers: ['李程式'],
       avatar: '💻',
-      password: 'eng123'
+      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b'
     },
     {
       id: 'engineer3',
@@ -57,7 +57,7 @@
       engineerName: '張工程',
       managedEngineers: ['張工程'],
       avatar: '💻',
-      password: 'eng123'
+      pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b'
     },
     {
       id: 'assistant1',
@@ -67,7 +67,7 @@
       roleCode: 'assistant',
       managedEngineers: [],
       avatar: '📋',
-      password: 'ast123'
+      pwdHash: 'a78548d218b1450e8a5680033627e434b730c56cabffb8270291f0657c04c3c9'
     }
   ];
 
@@ -330,24 +330,31 @@
       return !!State.currentUser;
     },
 
-    // 使用者登入驗證
-    login: function(username, password) {
-      var trimmedUser = (username || '').trim();
-      var trimmedPwd = (password || '').trim();
+    // 設定已通過身分驗證之使用者
+    setAuthenticatedUser: function(user) {
+      State.currentUser = user;
+      localStorage.setItem('udm_current_user_id', user.id);
+
+      if (user.roleCode === 'engineer') {
+        State.filterEngineer = user.engineerName;
+      } else {
+        State.filterEngineer = 'ALL';
+      }
+    },
+
+    // 本機離線驗證備援 (以 SHA-256 雜湊比對，不存明文)
+    verifyLocalLogin: function(username, passwordHash) {
+      var trimmedUser = (username || '').trim().toLowerCase();
+      var trimmedHash = (passwordHash || '').trim().toLowerCase();
 
       var matched = State.users.find(function(u) {
-        return (u.username === trimmedUser || u.id === trimmedUser) && (u.password === trimmedPwd);
+        var uUser = (u.username || u.id || '').toLowerCase();
+        var uHash = (u.pwdHash || '').toLowerCase();
+        return (uUser === trimmedUser) && (uHash === trimmedHash);
       });
 
       if (matched) {
-        State.currentUser = matched;
-        localStorage.setItem('udm_current_user_id', matched.id);
-
-        if (matched.roleCode === 'engineer') {
-          State.filterEngineer = matched.engineerName;
-        } else {
-          State.filterEngineer = 'ALL';
-        }
+        State.setAuthenticatedUser(matched);
         return { success: true, user: matched };
       }
 

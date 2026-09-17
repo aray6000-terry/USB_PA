@@ -628,21 +628,3 @@ body.light-theme .progress-bar {
   font-weight: 500;
 }
 
-.quick-login-box {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: var(--radius-md);
-}
-
-.quick-login-btn {
-  transition: all 0.2s ease;
-  font-size: 0.76rem;
-  padding: 4px 8px;
-}
-
-.quick-login-btn:hover {
-  background: var(--primary-light);
-  border-color: var(--primary);
-  color: var(--primary);
-  transform: translateY(-1px);
-}
-

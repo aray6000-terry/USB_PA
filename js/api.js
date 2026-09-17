@@ -12,6 +12,44 @@
       return !!(url && url.startsWith('http'));
     },
 
+    // 0. 安全登入驗證 (密碼經 SHA-256 加密後傳送至後端 Google Sheet 核對)
+    login: function(username, password) {
+      return window.CryptoService.generateHash(password).then(function(pwdHash) {
+        if (!ApiService.hasGasConfigured()) {
+          return Promise.resolve(window.AppState.verifyLocalLogin(username, pwdHash));
+        }
+
+        var secretKey = window.CryptoService.getSecretKey();
+        var postPayload = {
+          action: 'login',
+          authKey: secretKey,
+          data: {
+            username: username,
+            passwordHash: pwdHash
+          },
+          timestamp: Date.now()
+        };
+
+        return fetch(window.AppState.gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(postPayload)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(resData) {
+          if (resData.status === 'success' && resData.data && resData.data.user) {
+            return { success: true, user: resData.data.user };
+          } else {
+            return { success: false, message: resData.message || '帳號或密碼錯誤' };
+          }
+        })
+        .catch(function(err) {
+          console.warn('[API] 雲端登入服務呼叫失敗，切換至本機備援驗證：', err);
+          return window.AppState.verifyLocalLogin(username, pwdHash);
+        });
+      });
+    },
+
     // 1. 同步從 Google Sheet 抓取最新資料
     fetchData: function() {
       if (!ApiService.hasGasConfigured()) {
@@ -136,8 +174,7 @@
                 roleCode: roleCode,
                 engineerName: (roleCode === 'engineer' ? displayName : (managed[0] || '')),
                 managedEngineers: managed,
-                avatar: avatar,
-                password: (u['密碼'] || u.password || '').toString()
+                avatar: avatar
               };
             });
 

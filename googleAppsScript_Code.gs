@@ -148,14 +148,24 @@ function doGet(e) {
     
     var projectsData = sheetToObjects(ss.getSheetByName(SHEET_PROJECTS));
     var uploadsData = sheetToObjects(ss.getSheetByName(SHEET_UPLOADS));
-    var usersData = sheetToObjects(ss.getSheetByName(SHEET_USERS));
+    var rawUsers = sheetToObjects(ss.getSheetByName(SHEET_USERS));
+    
+    // 安全過濾：絕對不外洩人員密碼至前端
+    var safeUsers = rawUsers.map(function(u) {
+      return {
+        "帳號": u["帳號"],
+        "姓名": u["姓名"],
+        "角色": u["角色"],
+        "管轄工程師名單": u["管轄工程師名單"]
+      };
+    });
     
     var payload = {
       status: "success",
       timestamp: new Date().toISOString(),
       projects: projectsData,
       uploads: uploadsData,
-      users: usersData
+      users: safeUsers
     };
     
     return ContentService.createTextOutput(JSON.stringify(payload))
@@ -169,7 +179,7 @@ function doGet(e) {
 }
 
 /**
- * 處理 POST 請求：接收新增專案、更新主管佔比、助理審核
+ * 處理 POST 請求：接收登入驗證、新增專案、更新主管佔比、助理審核
  */
 function doPost(e) {
   try {
@@ -188,6 +198,68 @@ function doPost(e) {
     }
     
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    if (action === "login") {
+      // 帳號密碼登入驗證 (以 SHA-256 加密核對 Google Sheet 人員權限表)
+      var userSheet = ss.getSheetByName(SHEET_USERS);
+      if (!userSheet) return returnError("找不到人員權限表");
+      var rows = userSheet.getDataRange().getValues();
+      var inputUser = String(data.username || "").trim();
+      var inputHash = String(data.passwordHash || "").trim().toLowerCase();
+
+      for (var i = 1; i < rows.length; i++) {
+        var rowUser = String(rows[i][0] || "").trim();
+        var rowName = String(rows[i][1] || "").trim();
+        var rowRole = String(rows[i][2] || "").trim();
+        var rowManaged = String(rows[i][3] || "").trim();
+        var rowPwd = String(rows[i][4] || "").trim();
+
+        if (rowUser.toLowerCase() === inputUser.toLowerCase()) {
+          var rowPwdHash = sha256Hex(rowPwd).toLowerCase();
+          // 比對：支援明文密碼之 SHA256 比對，或試算表內已直接填入 Hash
+          if (rowPwdHash === inputHash || rowPwd.toLowerCase() === inputHash) {
+            var roleCode = "engineer";
+            var avatar = "💻";
+            if (rowRole.indexOf("超級") !== -1 || rowRole.indexOf("admin") !== -1) {
+              roleCode = "admin";
+              avatar = "👑";
+            } else if (rowRole.indexOf("主管") !== -1) {
+              roleCode = "manager";
+              avatar = "👔";
+            } else if (rowRole.indexOf("助理") !== -1) {
+              roleCode = "assistant";
+              avatar = "📋";
+            }
+
+            var managed = [];
+            if (rowManaged === "全部" || rowManaged === "*") {
+              managed = ["*"];
+            } else if (rowManaged && rowManaged !== "無") {
+              managed = rowManaged.split(/[,，]/).map(function(s) { return s.trim(); }).filter(Boolean);
+            }
+
+            var userObj = {
+              id: rowUser,
+              username: rowUser,
+              name: rowName,
+              role: rowRole,
+              roleCode: roleCode,
+              engineerName: (roleCode === "engineer" ? rowName : (managed[0] || "")),
+              managedEngineers: managed,
+              avatar: avatar
+            };
+
+            return returnSuccess({
+              message: "登入成功",
+              user: userObj
+            });
+          } else {
+            return returnError("帳號或密碼錯誤");
+          }
+        }
+      }
+      return returnError("帳號或密碼錯誤");
+    }
     
     if (action === "addProject") {
       // 助理 / 超級使用者 新增專案
@@ -337,3 +409,21 @@ function sheetToObjects(sheet) {
   }
   return result;
 }
+
+/**
+ * 計算字串之標準 SHA-256 雜湊值 (十六進位)
+ */
+function sha256Hex(str) {
+  if (!str) return "";
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(str), Utilities.Charset.UTF_8);
+  var hex = "";
+  for (var i = 0; i < bytes.length; i++) {
+    var b = bytes[i];
+    if (b < 0) b += 256;
+    var h = b.toString(16);
+    if (h.length === 1) hex += "0";
+    hex += h;
+  }
+  return hex;
+}
+
