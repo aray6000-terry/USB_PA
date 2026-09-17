@@ -120,6 +120,19 @@
         });
       });
 
+      // 專案考核明細表狀態快速切換 (全部 / 進行中 / 已結案)
+      var statusTabs = document.querySelectorAll('.btn-status-tab');
+      statusTabs.forEach(function(tab) {
+        tab.addEventListener('click', function(e) {
+          var targetStatus = e.currentTarget.getAttribute('data-status');
+          window.AppState.filterProjectStatus = targetStatus;
+          statusTabs.forEach(function(t) {
+            t.classList.toggle('active', t.getAttribute('data-status') === targetStatus);
+          });
+          App.refreshView();
+        });
+      });
+
       // 同步按鈕
       var btnSync = document.getElementById('btn-sync-data');
       if (btnSync) {
@@ -422,17 +435,50 @@
       }
     },
 
-    // 渲染專案列表表格 (含收件日、硬體完成時間、主管指派軟體工程師)
+    // 渲染專案列表表格 (7 大複合維度欄位，極致易讀性與考核焦點)
     renderProjectsTable: function() {
       var container = document.getElementById('projects-table-body');
       if (!container) return;
 
-      var visibleProjects = window.AppState.getVisibleProjects();
       var currentUser = window.AppState.currentUser;
       var role = currentUser.roleCode;
 
+      // 先取得符合當前時間/人員/關鍵字的角色可見專案清單 (忽視狀態) 用於狀態計數
+      var savedStatus = window.AppState.filterProjectStatus;
+      window.AppState.filterProjectStatus = 'ALL';
+      var allBaseProjects = window.AppState.getVisibleProjects();
+      window.AppState.filterProjectStatus = savedStatus;
+
+      var countAll = allBaseProjects.length;
+      var countActive = 0;
+      var countClosed = 0;
+
+      allBaseProjects.forEach(function(p) {
+        var st = p.status || '進行中';
+        if (st === '已結案') {
+          countClosed++;
+        } else {
+          countActive++;
+        }
+      });
+
+      // 更新狀態標籤計數
+      var elCountAll = document.getElementById('count-all-projects');
+      var elCountActive = document.getElementById('count-active-projects');
+      var elCountClosed = document.getElementById('count-closed-projects');
+      if (elCountAll) elCountAll.textContent = countAll;
+      if (elCountActive) elCountActive.textContent = countActive;
+      if (elCountClosed) elCountClosed.textContent = countClosed;
+
+      // 依當前狀態標籤過濾後之顯示專案清單
+      var visibleProjects = window.AppState.getVisibleProjects();
+
       if (visibleProjects.length === 0) {
-        container.innerHTML = '<tr><td colspan="14" class="text-center py-5 text-muted">無符合條件之專案資料</td></tr>';
+        container.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">' +
+          '<div style="font-size: 2.2rem; margin-bottom: 8px;">📂</div>' +
+          '<strong style="font-size: 1rem;">無符合條件之專案資料</strong>' +
+          '<div class="text-xs text-muted mt-1">請嘗試切換上方考核年度、月份、工程師或狀態標籤</div>' +
+          '</td></tr>';
         return;
       }
 
@@ -441,21 +487,27 @@
         var baseScore = window.Calculator.calculateProjectBaseScore(proj);
         var shares = window.Calculator.calculateEngineerProjectShares(proj);
 
-        // 格式化各工程師實得積分與佔比
+        // 格式化各工程師實得積分與主管佔比 (卡片式 Pill)
         var shareBadges = shares.length > 0
           ? shares.map(function(s) {
-              return '<span class="badge badge-share">' + s.engineer + ': <strong>' + s.earnedScore + '分</strong> (' + s.ratioPercent + '%)</span>';
-            }).join(' ')
+              return '<div class="share-pill-card">' +
+                '<span class="share-pill-name">👨‍💻 ' + s.engineer + '</span>' +
+                '<div>' +
+                  '<span class="share-pill-score font-bold">' + s.earnedScore + ' 分</span> ' +
+                  '<span class="share-pill-ratio text-xs">(' + s.ratioPercent + '%)</span>' +
+                '</div>' +
+              '</div>';
+            }).join('')
           : '<span class="text-muted text-xs">尚未指派軟體工程師</span>';
 
-        // 智慧建築與等級標籤
+        // 建築規格與等級標籤
         var isSmart = (proj.isSmartBuilding === true || proj.isSmartBuilding === '是');
         var smartTag = isSmart
-          ? '<span class="badge badge-smart">智慧建築 · ' + (proj.smartGrade || '合格') + '</span>'
-          : '<span class="badge badge-nonsmart">一般建築 · ' + (proj.units || 0) + '戶</span>';
+          ? '<span class="badge badge-smart">🏙️ 智慧建築 · ' + (proj.smartGrade || '合格') + '</span>'
+          : '<span class="badge badge-nonsmart">🏢 一般建築 · ' + (proj.units || 0) + '戶</span>';
 
         if (proj.projectType === '維護專案' || (proj.integrationItem && proj.integrationItem.indexOf('維護') !== -1)) {
-          smartTag = '<span class="badge badge-maint">維護專案 (1分)</span>';
+          smartTag = '<span class="badge badge-maint">🛠️ 維護專案 (固定1分)</span>';
         }
 
         // 狀態標籤
@@ -468,13 +520,13 @@
         
         // 主管與超級使用者：可「指派/修改軟體工程師」與「調整付出佔比」
         if (role === 'manager' || role === 'admin') {
-          actionBtns += '<button class="btn btn-xs btn-primary btn-edit-engineers" data-id="' + proj.projectId + '" title="主管指派或修改軟體工程師">👥 指派工程師</button> ';
-          actionBtns += '<button class="btn btn-xs btn-outline-primary btn-edit-ratio" data-id="' + proj.projectId + '" title="主管填寫多位工程師付出佔比">✏️ 調整佔比</button> ';
+          actionBtns += '<button type="button" class="btn btn-xs btn-primary btn-edit-engineers" data-id="' + proj.projectId + '" title="主管指派或修改軟體工程師">👥 指派工程師</button>';
+          actionBtns += '<button type="button" class="btn btn-xs btn-outline-primary btn-edit-ratio" data-id="' + proj.projectId + '" title="主管填寫多位工程師付出佔比">✏️ 調整佔比</button>';
         }
 
         // 助理與超級使用者：審核專案完成比例與結案狀態
         if (role === 'assistant' || role === 'admin') {
-          actionBtns += '<button class="btn btn-xs btn-outline-secondary btn-edit-completion" data-id="' + proj.projectId + '" title="審核完成比例與結案時間">📋 審核進度</button>';
+          actionBtns += '<button type="button" class="btn btn-xs btn-outline-secondary btn-edit-completion" data-id="' + proj.projectId + '" title="審核完成比例與結案時間">📋 審核進度</button>';
         }
 
         // 報價顯示保護 (助理若受限制可顯示保護)
@@ -484,30 +536,87 @@
         }
 
         html += '<tr>' +
-          '<td class="font-mono text-xs font-bold">' + proj.projectId + '</td>' +
-          '<td class="font-medium">' +
-            '<div class="proj-title">' + proj.projectName + '</div>' +
-            '<div class="text-xs text-muted">圖編: ' + (proj.drawingId || '-') + '</div>' +
-          '</td>' +
-          '<td class="text-xs font-mono text-muted">' + (proj.receiptDate || '<span class="text-dim">-</span>') + '</td>' +
-          '<td class="text-xs">' + (proj.integrationItem || '-') + '</td>' +
-          '<td class="text-xs font-medium">' + (proj.projectEngineer ? ('<span class="badge badge-share">硬體: ' + proj.projectEngineer + '</span>') : '<span class="text-dim">-</span>') + '</td>' +
-          '<td>' + smartTag + '</td>' +
-          '<td class="font-mono text-xs">' + quoteDisplay + '</td>' +
-          '<td class="font-bold text-indigo">' + baseScore.toFixed(1) + ' 分</td>' +
+          // 欄位 1: 專案識別與項目
           '<td>' +
-            '<div class="engineer-shares-col">' + shareBadges + '</div>' +
-          '</td>' +
-          '<td class="text-xs font-mono font-semibold">' + (proj.softwareCompletionDate || '<span class="text-muted font-normal">未完成</span>') + '</td>' +
-          '<td class="text-xs font-mono text-muted">' + (proj.hardwareCompletionDate || '<span class="text-dim">-</span>') + '</td>' +
-          '<td>' +
-            '<div class="completion-bar-wrap">' +
-              '<div class="progress-bar"><div class="progress-fill" style="width: ' + (proj.completionRate || '0%') + '"></div></div>' +
-              '<span class="text-xs">' + (proj.completionRate || '0%') + '</span>' +
+            '<div class="d-flex align-items-center gap-2 mb-1">' +
+              '<span class="badge-proj-id">' + proj.projectId + '</span>' +
+              '<span class="text-xs text-muted font-mono">圖編: ' + (proj.drawingId || '-') + '</span>' +
+            '</div>' +
+            '<div class="proj-title-main text-main mb-1">' + proj.projectName + '</div>' +
+            '<div class="text-xs text-muted proj-integration-text">' +
+              '📦 ' + (proj.integrationItem || '無細項說明') +
             '</div>' +
           '</td>' +
-          '<td><span class="badge ' + statusBadgeClass + '">' + (proj.status || '進行中') + '</span></td>' +
-          '<td><div class="action-btn-group">' + (actionBtns || '<span class="text-muted text-xs">僅讀</span>') + '</div></td>' +
+
+          // 欄位 2: 建築規格與報價
+          '<td>' +
+            '<div class="mb-1">' + smartTag + '</div>' +
+            '<div class="proj-quote-badge font-mono text-xs">' +
+              '<span class="text-muted">報價:</span> <strong>' + quoteDisplay + '</strong>' +
+            '</div>' +
+          '</td>' +
+
+          // 欄位 3: 負責人員 (軟 / 硬體)
+          '<td>' +
+            '<div class="mb-1">' +
+              '<span class="staff-role-label">💻 軟體:</span>' +
+              '<span class="font-semibold text-main">' + (proj.softwareEngineer || '<span class="text-muted">未指派</span>') + '</span>' +
+            '</div>' +
+            '<div class="text-xs text-muted">' +
+              '<span class="staff-role-label">🔌 硬體:</span>' +
+              '<span>' + (proj.projectEngineer || '-') + '</span>' +
+            '</div>' +
+          '</td>' +
+
+          // 欄位 4: 🎯 專案基準分與實得分分配 (主管佔比)
+          '<td>' +
+            '<div class="d-flex align-items-baseline gap-2 mb-2">' +
+              '<span class="text-xs text-muted">專案基準底分:</span>' +
+              '<span class="font-mono font-bold score-base-display">' + baseScore.toFixed(1) + ' <small class="text-xs">分</small></span>' +
+            '</div>' +
+            '<div class="engineer-shares-pills">' +
+              shareBadges +
+            '</div>' +
+          '</td>' +
+
+          // 欄位 5: 重要時程節點 (垂直收納，清晰對比)
+          '<td class="text-xs font-mono">' +
+            '<div class="schedule-row mb-1">' +
+              '<span class="schedule-dot dot-receipt"></span>' +
+              '<span class="text-muted">收件:</span> ' +
+              '<span>' + (proj.receiptDate || '-') + '</span>' +
+            '</div>' +
+            '<div class="schedule-row mb-1">' +
+              '<span class="schedule-dot dot-soft"></span>' +
+              '<span class="text-muted">軟體:</span> ' +
+              '<span class="' + (proj.softwareCompletionDate ? 'text-success font-semibold' : 'text-muted') + '">' +
+                (proj.softwareCompletionDate || '進行中') +
+              '</span>' +
+            '</div>' +
+            '<div class="schedule-row">' +
+              '<span class="schedule-dot dot-hard"></span>' +
+              '<span class="text-muted">硬體:</span> ' +
+              '<span>' + (proj.hardwareCompletionDate || '-') + '</span>' +
+            '</div>' +
+          '</td>' +
+
+          // 欄位 6: 進度 & 狀態
+          '<td>' +
+            '<div class="mb-1">' +
+              '<span class="badge ' + statusBadgeClass + '">' + (proj.status || '進行中') + '</span>' +
+            '</div>' +
+            '<div class="completion-bar-wrap">' +
+              '<div class="progress-bar"><div class="progress-fill" style="width: ' + (proj.completionRate || '0%') + '"></div></div>' +
+              '<span class="text-xs font-mono font-semibold">' + (proj.completionRate || '0%') + '</span>' +
+            '</div>' +
+          '</td>' +
+
+          // 欄位 7: 操作
+          '<td style="text-align: center;">' +
+            '<div class="action-btn-group-vertical">' +
+              (actionBtns || '<span class="text-muted text-xs">唯讀檢視</span>') +
+            '</div>' +
+          '</td>' +
         '</tr>';
       });
 

@@ -229,24 +229,35 @@
 
     <!-- 分頁 1: 專案考核明細表 -->
     <div id="pane-projects" class="tab-pane active">
+      <!-- 表格上方工具列：快速狀態篩選標籤 + 說明 -->
+      <div class="table-toolbar mb-3 d-flex justify-content-between align-items-center" style="flex-wrap: wrap; gap: 12px;">
+        <div class="project-status-tabs d-flex gap-2" id="project-status-filters">
+          <button type="button" class="btn-status-tab active" data-status="ALL">
+            📋 全部專案 <span class="badge-count" id="count-all-projects">0</span>
+          </button>
+          <button type="button" class="btn-status-tab" data-status="進行中">
+            ⚡ 進行中 <span class="badge-count badge-count-progress" id="count-active-projects">0</span>
+          </button>
+          <button type="button" class="btn-status-tab" data-status="已結案">
+            ✅ 已結案 <span class="badge-count badge-count-done" id="count-closed-projects">0</span>
+          </button>
+        </div>
+        <div class="table-toolbar-meta text-xs text-muted">
+          💡 點擊「👥 指派工程師」或「✏️ 調整佔比」可即時設定多位工程師貢獻
+        </div>
+      </div>
+
       <div class="table-responsive">
-        <table class="custom-table">
+        <table class="custom-table project-detail-table">
           <thead>
             <tr>
-              <th>案編</th>
-              <th>案名 / 圖編</th>
-              <th>收件日期</th>
-              <th>整合項目</th>
-              <th>專案工程師</th>
-              <th>建築類別 / 等級 / 戶數</th>
-              <th>報價金額</th>
-              <th>專案基準分</th>
-              <th>軟體工程師 (主管佔比 / 實得分)</th>
-              <th>軟體完成時間</th>
-              <th>硬體完成時間</th>
-              <th>進度</th>
-              <th>狀態</th>
-              <th>操作</th>
+              <th style="min-width: 220px;">專案資訊 (案編 / 案名 / 整合項目)</th>
+              <th style="min-width: 140px;">建築規格 & 報價</th>
+              <th style="min-width: 140px;">負責人員 (軟 / 硬體)</th>
+              <th style="min-width: 260px;">🎯 專案基準分與實得分分配 (主管佔比)</th>
+              <th style="min-width: 150px;">重要時程節點</th>
+              <th style="min-width: 120px;">進度 & 狀態</th>
+              <th style="min-width: 110px; text-align: center;">操作</th>
             </tr>
           </thead>
           <tbody id="projects-table-body">

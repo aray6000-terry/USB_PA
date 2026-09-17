@@ -407,6 +407,7 @@
     filterYear: '2026',
     filterMonth: 'ALL',
     filterEngineer: 'ALL',
+    filterProjectStatus: 'ALL', // 'ALL', '進行中', '已結案'
     searchKeyword: '',
     activeTab: 'projects', // 'projects', 'leaderboard', 'assistant_audit', 'settings'
 
@@ -642,6 +643,13 @@
         list = list.filter(function(p) {
           var engs = (p.softwareEngineer || '').split(/[,，、;；\s]+/);
           return engs.some(function(e) { return e.trim() === State.filterEngineer; });
+        });
+      }
+
+      // 依專案狀態標籤篩選 (全部 / 進行中 / 已結案)
+      if (State.filterProjectStatus && State.filterProjectStatus !== 'ALL') {
+        list = list.filter(function(p) {
+          return (p.status || '進行中') === State.filterProjectStatus;
         });
       }
 
