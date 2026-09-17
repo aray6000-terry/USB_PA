@@ -7,6 +7,50 @@
   'use strict';
 
   var App = {
+    // 按鈕防呆鎖定工具：防止快速連點與重複提交
+    withButtonLock: function(btn, asyncFn, loadingText) {
+      if (!btn) return Promise.resolve().then(asyncFn);
+      if (btn.disabled || btn.dataset.submitting === 'true') {
+        console.warn('[防呆機制] 該操作正在進行中，已阻斷連點觸發');
+        return Promise.resolve();
+      }
+
+      btn.disabled = true;
+      btn.dataset.submitting = 'true';
+      var originalHtml = btn.innerHTML;
+
+      if (loadingText) {
+        btn.innerHTML = '<span class="spinner-border-sm"></span> ' + loadingText;
+      } else {
+        btn.classList.add('loading');
+      }
+
+      function done() {
+        // 450ms 緩衝延遲，防止快速雙擊
+        setTimeout(function() {
+          btn.disabled = false;
+          btn.dataset.submitting = 'false';
+          btn.innerHTML = originalHtml;
+          btn.classList.remove('loading');
+        }, 450);
+      }
+
+      return Promise.resolve()
+        .then(function() {
+          return asyncFn();
+        })
+        .then(
+          function(res) {
+            done();
+            return res;
+          },
+          function(err) {
+            done();
+            throw err;
+          }
+        );
+    },
+
     init: function() {
       window.AppState.init();
       App.setupEventListeners();
@@ -182,15 +226,18 @@
         });
       }
       if (btnAddCompanyEng) {
-        btnAddCompanyEng.addEventListener('click', function() {
-          if (!selectCompanyEng) return;
-          var val = selectCompanyEng.value;
-          if (val) {
-            App.addEngineerToInput('edit-eng-input', 'selected-engineers-tags', val);
-            selectCompanyEng.value = '';
-          } else {
-            alert('請先從下拉選單選擇一位工程師！');
-          }
+        btnAddCompanyEng.addEventListener('click', function(e) {
+          App.withButtonLock(e.currentTarget, function() {
+            if (!selectCompanyEng) return Promise.resolve();
+            var val = selectCompanyEng.value;
+            if (val) {
+              App.addEngineerToInput('edit-eng-input', 'selected-engineers-tags', val);
+              selectCompanyEng.value = '';
+            } else {
+              alert('請先從下拉選單選擇一位工程師！');
+            }
+            return Promise.resolve();
+          });
         });
       }
       if (editEngInput) {
@@ -214,15 +261,18 @@
         });
       }
       if (btnAddProjEng) {
-        btnAddProjEng.addEventListener('click', function() {
-          if (!selectAddProjEng) return;
-          var val = selectAddProjEng.value;
-          if (val) {
-            App.addEngineerToInput('add-software-engineer', 'add-project-engineers-tags', val);
-            selectAddProjEng.value = '';
-          } else {
-            alert('請先從下拉選單選擇一位工程師！');
-          }
+        btnAddProjEng.addEventListener('click', function(e) {
+          App.withButtonLock(e.currentTarget, function() {
+            if (!selectAddProjEng) return Promise.resolve();
+            var val = selectAddProjEng.value;
+            if (val) {
+              App.addEngineerToInput('add-software-engineer', 'add-project-engineers-tags', val);
+              selectAddProjEng.value = '';
+            } else {
+              alert('請先從下拉選單選擇一位工程師！');
+            }
+            return Promise.resolve();
+          });
         });
       }
       if (addProjEngInput) {
@@ -690,12 +740,12 @@
 
       container.innerHTML = html;
 
-      // 綁定審核核准與退回按鈕
+      // 綁定審核核准與退回按鈕 (含防呆鎖定)
       container.querySelectorAll('.btn-audit-pass').forEach(function(b) {
         b.addEventListener('click', function(e) {
           var ym = e.currentTarget.getAttribute('data-ym');
           var eng = e.currentTarget.getAttribute('data-eng');
-          App.handleAuditUpload(ym, eng, '審核通過');
+          App.handleAuditUpload(ym, eng, '審核通過', e.currentTarget);
         });
       });
 
@@ -703,18 +753,22 @@
         b.addEventListener('click', function(e) {
           var ym = e.currentTarget.getAttribute('data-ym');
           var eng = e.currentTarget.getAttribute('data-eng');
-          App.handleAuditUpload(ym, eng, '退回');
+          App.handleAuditUpload(ym, eng, '退回', e.currentTarget);
         });
       });
     },
 
-    // 助理審核動作處理 (核准/退回)
-    handleAuditUpload: function(yearMonth, engineer, status) {
+    // 助理審核動作處理 (核准/退回 - 含防呆鎖定)
+    handleAuditUpload: function(yearMonth, engineer, status, triggerBtn) {
       var auditorName = window.AppState.currentUser ? window.AppState.currentUser.name : '助理';
-      window.ApiService.auditUpload(yearMonth, engineer, status, auditorName).then(function(res) {
-        App.showToast(res.message || (engineer + ' ' + yearMonth + ' 月度固定上傳審核已設定為：' + status));
-        App.refreshView();
-      });
+      App.withButtonLock(triggerBtn, function() {
+        return window.ApiService.auditUpload(yearMonth, engineer, status, auditorName).then(function(res) {
+          App.showToast(res.message || (engineer + ' ' + yearMonth + ' 月度固定上傳審核已設定為：' + status));
+          App.refreshView();
+        }).catch(function(err) {
+          App.showToast('審核失敗：' + err.message);
+        });
+      }, '處理中...');
     },
 
     // 開啟登記每月上傳 Modal
@@ -745,7 +799,7 @@
       modal.classList.add('show');
     },
 
-    // 提交登記每月上傳
+    // 提交登記每月上傳 (含防呆鎖定)
     handleSubmitAddUpload: function(e) {
       e.preventDefault();
       var ym = document.getElementById('add-upload-year-month').value.trim();
@@ -760,28 +814,17 @@
       }
 
       var submitBtn = document.getElementById('btn-submit-add-upload');
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = '同步中...';
-      }
-
-      window.ApiService.addUpload(ym, eng, uploadDate, auditStatus, auditorName)
-        .then(function(res) {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = '確認登記並同步';
-          }
-          document.getElementById('modal-add-upload').classList.remove('show');
-          App.showToast(res.message || ('已成功登記 ' + eng + ' ' + ym + ' 上傳資料！'));
-          App.refreshView();
-        })
-        .catch(function(err) {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = '確認登記並同步';
-          }
-          App.showToast('登記失敗：' + err.message);
-        });
+      App.withButtonLock(submitBtn, function() {
+        return window.ApiService.addUpload(ym, eng, uploadDate, auditStatus, auditorName)
+          .then(function(res) {
+            document.getElementById('modal-add-upload').classList.remove('show');
+            App.showToast(res.message || ('已成功登記 ' + eng + ' ' + ym + ' 上傳資料！'));
+            App.refreshView();
+          })
+          .catch(function(err) {
+            App.showToast('登記失敗：' + err.message);
+          });
+      }, '登記同步中...');
     },
 
     // 主管填寫付出佔比 Modal
@@ -856,9 +899,11 @@
       modal.classList.add('show');
     },
 
-    // 儲存主管佔比
+    // 儲存主管佔比 (含防呆鎖定)
     handleSaveRatios: function(e) {
       e.preventDefault();
+      var form = document.getElementById('form-ratio-editor');
+      var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
       var projectId = document.getElementById('ratio-modal-project-id').value;
       var inputs = document.querySelectorAll('#ratio-engineers-inputs .ratio-input');
       
@@ -877,11 +922,15 @@
       }
 
       var ratioString = ratioParts.join(', ');
-      window.ApiService.updateRatios(projectId, ratioString).then(function() {
-        document.getElementById('modal-ratio-editor').classList.remove('show');
-        App.showToast('主管已成功設定工程師付出佔比：' + ratioString);
-        App.refreshView();
-      });
+      App.withButtonLock(submitBtn, function() {
+        return window.ApiService.updateRatios(projectId, ratioString).then(function() {
+          document.getElementById('modal-ratio-editor').classList.remove('show');
+          App.showToast('主管已成功設定工程師付出佔比：' + ratioString);
+          App.refreshView();
+        }).catch(function(err) {
+          App.showToast('儲存佔比失敗：' + err.message);
+        });
+      }, '儲存中...');
     },
 
     // 主管 / 超級使用者：指派與修改軟體工程師名單 Modal
@@ -978,9 +1027,11 @@
       modal.classList.add('show');
     },
 
-    // 儲存主管 / 超級使用者 修改之軟體工程師名單
+    // 儲存主管 / 超級使用者 修改之軟體工程師名單 (含防呆鎖定)
     handleSaveEngineers: function(e) {
       e.preventDefault();
+      var form = document.getElementById('form-edit-engineers');
+      var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
       var projectId = document.getElementById('edit-eng-modal-project-id').value;
       var newEngs = document.getElementById('edit-eng-input').value.trim();
 
@@ -989,11 +1040,15 @@
         return;
       }
 
-      window.ApiService.updateSoftwareEngineers(projectId, newEngs).then(function() {
-        document.getElementById('modal-edit-engineers').classList.remove('show');
-        App.showToast('專案軟體工程師名單已成功更新為：' + newEngs);
-        App.refreshView();
-      });
+      App.withButtonLock(submitBtn, function() {
+        return window.ApiService.updateSoftwareEngineers(projectId, newEngs).then(function() {
+          document.getElementById('modal-edit-engineers').classList.remove('show');
+          App.showToast('專案軟體工程師名單已成功更新為：' + newEngs);
+          App.refreshView();
+        }).catch(function(err) {
+          App.showToast('更新失敗：' + err.message);
+        });
+      }, '儲存中...');
     },
 
     // 助理審核完成進度 Modal
@@ -1031,19 +1086,25 @@
       modal.classList.add('show');
     },
 
-    // 儲存助理審核進度
+    // 儲存助理審核進度 (含防呆鎖定)
     handleSaveCompletion: function(e) {
       e.preventDefault();
+      var form = document.getElementById('form-completion-editor');
+      var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
       var projectId = document.getElementById('comp-modal-project-id').value;
       var rate = document.getElementById('comp-rate-range').value + '%';
       var status = document.getElementById('comp-status-select').value;
       var softDate = document.getElementById('comp-software-date').value;
 
-      window.ApiService.updateCompletion(projectId, rate, status, softDate).then(function() {
-        document.getElementById('modal-completion-editor').classList.remove('show');
-        App.showToast('助理已更新專案完成比例與結案狀態');
-        App.refreshView();
-      });
+      App.withButtonLock(submitBtn, function() {
+        return window.ApiService.updateCompletion(projectId, rate, status, softDate).then(function() {
+          document.getElementById('modal-completion-editor').classList.remove('show');
+          App.showToast('助理已更新專案完成比例與結案狀態');
+          App.refreshView();
+        }).catch(function(err) {
+          App.showToast('更新失敗：' + err.message);
+        });
+      }, '儲存中...');
     },
 
     // 開啟新增專案 Modal
@@ -1108,9 +1169,12 @@
       }
     },
 
-    // 處理建立新專案
+    // 處理建立新專案 (含防呆鎖定)
     handleCreateProject: function(e) {
       e.preventDefault();
+      var form = document.getElementById('form-add-project');
+      var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+
       var isSmart = document.getElementById('add-is-smart').value === '是';
       var engineersStr = document.getElementById('add-software-engineer').value.trim();
       var quoteVal = parseFloat(document.getElementById('add-quote').value) || 0;
@@ -1142,25 +1206,35 @@
         completionRate: document.getElementById('add-completion-rate').value + '%'
       };
 
-      window.ApiService.addProject(newProject).then(function(res) {
-        document.getElementById('modal-add-project').classList.remove('show');
-        document.getElementById('form-add-project').reset();
-        App.showToast('專案已成功建立並同步！');
-        App.refreshView();
-      });
+      App.withButtonLock(submitBtn, function() {
+        return window.ApiService.addProject(newProject).then(function(res) {
+          document.getElementById('modal-add-project').classList.remove('show');
+          form.reset();
+          App.showToast('專案已成功建立並同步！');
+          App.refreshView();
+        }).catch(function(err) {
+          App.showToast('專案建立失敗：' + err.message);
+        });
+      }, '專案建立中...');
     },
 
-    // 觸發手動同步
+    // 觸發手動同步 (含防呆鎖定)
     handleSyncData: function() {
       var btn = document.getElementById('btn-sync-data');
-      if (btn) btn.classList.add('loading');
+      if (window.AppState.isSyncing) {
+        console.warn('[防呆機制] 資料庫同步正在執行中');
+        return;
+      }
 
-      window.ApiService.fetchData().then(function(data) {
-        if (btn) btn.classList.remove('loading');
-        App.showToast(data.warning ? ('注意：' + data.warning) : 'Google Sheet 資料庫已同步完成！');
-        App.populateFilterDropdowns();
-        App.refreshView();
-      });
+      App.withButtonLock(btn, function() {
+        return window.ApiService.fetchData().then(function(data) {
+          App.showToast(data.warning ? ('注意：' + data.warning) : 'Google Sheet 資料庫已同步完成！');
+          App.populateFilterDropdowns();
+          App.refreshView();
+        }).catch(function(err) {
+          App.showToast('同步失敗：' + err.message);
+        });
+      }, '同步中...');
     },
 
     // 登入驗證相關
@@ -1195,51 +1269,39 @@
         return;
       }
 
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = '🔐 驗證中...';
-      }
+      App.withButtonLock(submitBtn, function() {
+        return window.ApiService.login(username, password)
+          .then(function(res) {
+            if (res.success && res.user) {
+              if (errBox) errBox.style.display = 'none';
+              window.AppState.setAuthenticatedUser(res.user);
+              App.closeLoginModal();
+              document.getElementById('login-password').value = '';
 
-      window.ApiService.login(username, password)
-        .then(function(res) {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = '🔐 安全登入';
-          }
+              App.renderUserRoleUI();
+              App.populateFilterDropdowns();
+              App.showToast('🎉 歡迎回來，' + res.user.name + ' (' + res.user.role + ')！');
 
-          if (res.success && res.user) {
-            if (errBox) errBox.style.display = 'none';
-            window.AppState.setAuthenticatedUser(res.user);
-            App.closeLoginModal();
-            document.getElementById('login-password').value = '';
-
-            App.renderUserRoleUI();
-            App.populateFilterDropdowns();
-            App.showToast('🎉 歡迎回來，' + res.user.name + ' (' + res.user.role + ')！');
-
-            // 登入成功後，即刻從後端載入該角色專案與資料
-            if (window.ApiService.hasGasConfigured()) {
-              App.handleSyncData();
+              // 登入成功後，即刻從後端載入該角色專案與資料
+              if (window.ApiService.hasGasConfigured()) {
+                App.handleSyncData();
+              } else {
+                App.refreshView();
+              }
             } else {
-              App.refreshView();
+              if (errBox) {
+                errBox.textContent = '❌ ' + (res.message || '帳號或密碼錯誤');
+                errBox.style.display = 'block';
+              }
             }
-          } else {
+          })
+          .catch(function(err) {
             if (errBox) {
-              errBox.textContent = '❌ ' + (res.message || '帳號或密碼錯誤');
+              errBox.textContent = '❌ 登入驗證失敗：' + err.message;
               errBox.style.display = 'block';
             }
-          }
-        })
-        .catch(function(err) {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = '🔐 安全登入';
-          }
-          if (errBox) {
-            errBox.textContent = '❌ 登入驗證失敗：' + err.message;
-            errBox.style.display = 'block';
-          }
-        });
+          });
+      }, '🔐 驗證中...');
     },
 
     handleLogout: function() {
