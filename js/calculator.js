@@ -121,10 +121,14 @@
       });
     },
 
-    // 5. 判斷專案是否落入指定時間區段 (年/月，以軟體完成時間為準)
+    // 5. 判斷專案是否落入指定時間區段 (A方案：雙軌判定 - 優先以軟體完成時間判定；若進行中未完成則退回依收件/需求日期判定所屬年度)
     isProjectInPeriod: function(project, period) {
       if (!period || period === 'ALL') return true;
       var dateStr = (project.softwareCompletionDate || project['軟體完成時間'] || '').toString().trim();
+      if (!dateStr) {
+        // 進行中專案 fallback：以收件日期或需求日期作為歸屬基準
+        dateStr = (project.receiptDate || project['收件日期'] || project.requiredDate || project['需求日期'] || '').toString().trim();
+      }
       if (!dateStr) return false;
 
       // 支援 YYYY-MM 格式 或 YYYY 格式
@@ -196,31 +200,41 @@
           initStats(eng);
 
           if (inCurrent) {
-            statsMap[eng].totalScore += sh.earnedScore;
-            statsMap[eng].totalProjects += 1;
+            // 判斷是否為已完成專案 (軟體完成時間有值 或 狀態為已結案/軟體完成)
+            var isCompleted = !!((proj.softwareCompletionDate || proj['軟體完成時間'] || '').toString().trim() || proj.status === '已結案' || proj.status === '軟體完成');
 
-            if (isMaint) {
-              statsMap[eng].maintenanceScore += sh.earnedScore;
-              statsMap[eng].maintenanceCount += 1;
-            } else if (isSmart) {
-              statsMap[eng].smartScore += sh.earnedScore;
-              statsMap[eng].smartCount += 1;
-            } else {
-              statsMap[eng].nonSmartScore += sh.earnedScore;
-              statsMap[eng].nonSmartCount += 1;
+            // 考核認列總積分與已完成專案數只統計「軟體已完成」之專案，進行中專案僅列入清單供管理追蹤
+            if (isCompleted) {
+              statsMap[eng].totalScore += sh.earnedScore;
+              statsMap[eng].totalProjects += 1;
+
+              if (isMaint) {
+                statsMap[eng].maintenanceScore += sh.earnedScore;
+                statsMap[eng].maintenanceCount += 1;
+              } else if (isSmart) {
+                statsMap[eng].smartScore += sh.earnedScore;
+                statsMap[eng].smartCount += 1;
+              } else {
+                statsMap[eng].nonSmartScore += sh.earnedScore;
+                statsMap[eng].nonSmartCount += 1;
+              }
             }
 
             statsMap[eng].projectsList.push({
               project: proj,
               share: sh,
               baseScore: baseScore,
+              isCompleted: isCompleted,
               category: isMaint ? '維護' : (isSmart ? '智慧建築' : '非智慧建築')
             });
           }
 
           if (inLastYear) {
-            statsMap[eng].lastYearTotalScore += sh.earnedScore;
-            statsMap[eng].lastYearProjects += 1;
+            var isLastYearCompleted = !!((proj.softwareCompletionDate || proj['軟體完成時間'] || '').toString().trim() || proj.status === '已結案' || proj.status === '軟體完成');
+            if (isLastYearCompleted) {
+              statsMap[eng].lastYearTotalScore += sh.earnedScore;
+              statsMap[eng].lastYearProjects += 1;
+            }
           }
         });
       });
