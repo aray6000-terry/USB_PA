@@ -628,3 +628,40 @@ body.light-theme .progress-bar {
   font-weight: 500;
 }
 
+/* 工程師標籤樣式 (支援快速移除) */
+.engineer-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--primary);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+.engineer-tag:hover {
+  background: rgba(99, 102, 241, 0.22);
+}
+.engineer-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0.7;
+  font-weight: bold;
+  font-size: 14px;
+  line-height: 1;
+  transition: all var(--transition-fast);
+}
+.engineer-tag-remove:hover {
+  opacity: 1;
+  background: rgba(244, 63, 94, 0.2);
+  color: #f43f5e;
+}
+

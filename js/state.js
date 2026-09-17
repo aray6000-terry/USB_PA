@@ -36,6 +36,27 @@
       avatar: '📋',
       pwdHash: 'a78548d218b1450e8a5680033627e434b730c56cabffb8270291f0657c04c3c9' // ast123
     },
+    // Google Sheet 實際軟體工程師名單
+    {
+      id: 'abc35789abc35789@gmail.com',
+      username: 'abc35789abc35789@gmail.com',
+      name: '何貫宇',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '何貫宇',
+      managedEngineers: ['何貫宇'],
+      avatar: '💻'
+    },
+    {
+      id: 'amyliupp@gmail.com',
+      username: 'amyliupp@gmail.com',
+      name: '劉彩雲',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '劉彩雲',
+      managedEngineers: ['劉彩雲'],
+      avatar: '💻'
+    },
     {
       id: 'taisan648@gmail.com',
       username: 'taisan648@gmail.com',
@@ -47,6 +68,67 @@
       avatar: '💻',
       pwdHash: 'f63248efa4a61efc9f4c9f6e5de25b34b6f2b827717cd4c6b3905481c3bd483b' // eng123
     },
+    {
+      id: 'hew183273@gmail.com',
+      username: 'hew183273@gmail.com',
+      name: '何瑋恩',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '何瑋恩',
+      managedEngineers: ['何瑋恩'],
+      avatar: '💻'
+    },
+    {
+      id: 'kitty89092616@gmail.com',
+      username: 'kitty89092616@gmail.com',
+      name: '簡昕儀',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '簡昕儀',
+      managedEngineers: ['簡昕儀'],
+      avatar: '💻'
+    },
+    {
+      id: 'ccw891129@gmail.com',
+      username: 'ccw891129@gmail.com',
+      name: '江嘉偉',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '江嘉偉',
+      managedEngineers: ['江嘉偉'],
+      avatar: '💻'
+    },
+    {
+      id: 'yy0937010806@gmail.com',
+      username: 'yy0937010806@gmail.com',
+      name: '徐堉桉',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '徐堉桉',
+      managedEngineers: ['徐堉桉'],
+      avatar: '💻'
+    },
+    {
+      id: 'ken.work345@gmail.com',
+      username: 'ken.work345@gmail.com',
+      name: '侯凱嚴',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '侯凱嚴',
+      managedEngineers: ['侯凱嚴'],
+      avatar: '💻'
+    },
+    {
+      id: 'keionmio028@gmail.com',
+      username: 'keionmio028@gmail.com',
+      name: '傅秉和',
+      role: '工程師',
+      roleCode: 'engineer',
+      engineerName: '傅秉和',
+      managedEngineers: ['傅秉和'],
+      avatar: '💻'
+    },
+    // 向下相容之預設測試使用者
     {
       id: 'manager1',
       username: 'manager1',
@@ -460,19 +542,63 @@
       }
     },
 
+    // 取得全公司所有軟體工程師名單 (來自 Google Sheet 使用者表及專案歷史名單)
+    getAllCompanyEngineers: function() {
+      var nameSet = [];
+      function addName(n) {
+        if (!n) return;
+        var clean = String(n).trim();
+        if (clean && clean !== '全部' && clean !== '*' && clean !== '無' && nameSet.indexOf(clean) === -1) {
+          nameSet.push(clean);
+        }
+      }
+
+      // 1. 從使用者名單中抓取工程師與主管管轄的工程師
+      (State.users || []).forEach(function(u) {
+        if (u.roleCode === 'engineer' || u.role === '工程師') {
+          addName(u.engineerName || u.name);
+        }
+        if (Array.isArray(u.managedEngineers)) {
+          u.managedEngineers.forEach(function(m) {
+            addName(m);
+          });
+        }
+      });
+
+      // 2. 從專案資料軟體工程師欄位抓取
+      (State.projects || []).forEach(function(p) {
+        var engs = (p.softwareEngineer || '').split(/[,，、;；\s]+/);
+        engs.forEach(function(e) {
+          addName(e);
+        });
+      });
+
+      // 3. 若為空則以 Google Sheet 上的標準工程師名單為基準
+      if (nameSet.length === 0) {
+        ['何貫宇', '劉彩雲', '廖國寓', '何瑋恩', '簡昕儀', '江嘉偉', '徐堉桉', '侯凱嚴', '傅秉和'].forEach(addName);
+      }
+
+      return nameSet;
+    },
+
     // 取得當前角色可見的工程師清單
     getVisibleEngineers: function() {
-      var allSoftwareEngs = ['林軟體', '李程式', '張工程'];
-      if (!State.currentUser) return [];
+      var allSoftwareEngs = State.getAllCompanyEngineers();
+      if (!State.currentUser) return allSoftwareEngs;
 
       if (State.currentUser.roleCode === 'admin') {
         return allSoftwareEngs;
       }
       if (State.currentUser.roleCode === 'manager') {
-        return State.currentUser.managedEngineers || allSoftwareEngs;
+        var managed = State.currentUser.managedEngineers;
+        if (managed && managed.length > 0 && managed[0] !== '*' && managed[0] !== '全部') {
+          return managed;
+        }
+        return allSoftwareEngs;
       }
       if (State.currentUser.roleCode === 'engineer') {
-        return [State.currentUser.engineerName];
+        var myName = State.currentUser.engineerName || State.currentUser.name;
+        return [myName];
       }
       if (State.currentUser.roleCode === 'assistant') {
         return allSoftwareEngs;

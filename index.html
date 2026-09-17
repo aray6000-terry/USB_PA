@@ -445,7 +445,14 @@
             </div>
             <div class="form-group">
               <label for="add-software-engineer">軟體工程師 (考核對象，可多位逗號隔開) *</label>
-              <input type="text" id="add-software-engineer" class="form-control" placeholder="例：林軟體, 李程式" required>
+              <input type="text" id="add-software-engineer" class="form-control" placeholder="例：何貫宇, 劉彩雲" required>
+              <div class="d-flex gap-2 align-items-center mt-1">
+                <select id="select-add-project-engineer" class="form-control" style="font-size: 0.82rem; flex: 1;">
+                  <option value="">-- 快速下拉選擇 Google Sheet 工程師 --</option>
+                </select>
+                <button type="button" id="btn-add-project-selected-engineer" class="btn btn-xs btn-outline-secondary" style="white-space: nowrap; height: 32px;">➕ 加入</button>
+              </div>
+              <div id="add-project-engineers-tags" class="d-flex gap-1 mt-1" style="flex-wrap: wrap;"></div>
             </div>
           </div>
 
@@ -585,13 +592,15 @@
           </div>
 
           <div class="form-group mb-3">
-            <label>快速選擇公司軟體工程師：</label>
-            <div id="quick-select-engineers" class="d-flex gap-2 mt-1" style="flex-wrap: wrap;">
-              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="林軟體">+ 林軟體</button>
-              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="李程式">+ 李程式</button>
-              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="張工程">+ 張工程</button>
-              <button type="button" class="btn btn-xs btn-outline-secondary quick-eng-btn" data-name="王新創">+ 王新創</button>
+            <label for="select-company-engineer">快速選擇公司軟體工程師 (Google Sheet 即時名單)：</label>
+            <div class="d-flex gap-2 align-items-center mt-1">
+              <select id="select-company-engineer" class="form-control" style="flex: 1;">
+                <option value="">-- 請由下拉選單挑選軟體工程師 --</option>
+              </select>
+              <button type="button" id="btn-add-selected-engineer" class="btn btn-secondary" style="white-space: nowrap;">➕ 加入名單</button>
             </div>
+            <div class="text-xs text-muted mt-1">💡 已加入的工程師名單 (點擊 ✕ 可直接移除)：</div>
+            <div id="selected-engineers-tags" class="d-flex gap-1 mt-1 p-2 border rounded" style="flex-wrap: wrap; min-height: 38px; background: rgba(0,0,0,0.02);"></div>
           </div>
         </div>
         <div class="modal-footer">

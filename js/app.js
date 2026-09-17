@@ -154,20 +154,69 @@
         editEngForm.addEventListener('submit', App.handleSaveEngineers);
       }
 
-      // 快速選擇工程師按鈕
-      document.querySelectorAll('.quick-eng-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-          var name = e.currentTarget.getAttribute('data-name');
-          var input = document.getElementById('edit-eng-input');
-          if (!input) return;
-          var cur = input.value.trim();
-          var list = cur ? cur.split(/[,，、;；\s]+/).map(function(s){return s.trim();}).filter(Boolean) : [];
-          if (list.indexOf(name) === -1) {
-            list.push(name);
-            input.value = list.join(', ');
+      // 快速下拉選擇工程師 (主管指派工程師 Modal)
+      var selectCompanyEng = document.getElementById('select-company-engineer');
+      var btnAddCompanyEng = document.getElementById('btn-add-selected-engineer');
+      var editEngInput = document.getElementById('edit-eng-input');
+
+      if (selectCompanyEng) {
+        selectCompanyEng.addEventListener('change', function(e) {
+          var val = e.target.value;
+          if (val) {
+            App.addEngineerToInput('edit-eng-input', 'selected-engineers-tags', val);
+            e.target.value = '';
           }
         });
-      });
+      }
+      if (btnAddCompanyEng) {
+        btnAddCompanyEng.addEventListener('click', function() {
+          if (!selectCompanyEng) return;
+          var val = selectCompanyEng.value;
+          if (val) {
+            App.addEngineerToInput('edit-eng-input', 'selected-engineers-tags', val);
+            selectCompanyEng.value = '';
+          } else {
+            alert('請先從下拉選單選擇一位工程師！');
+          }
+        });
+      }
+      if (editEngInput) {
+        editEngInput.addEventListener('input', function() {
+          App.renderEngineerTags('edit-eng-input', 'selected-engineers-tags');
+        });
+      }
+
+      // 快速下拉選擇工程師 (新增專案 Modal)
+      var selectAddProjEng = document.getElementById('select-add-project-engineer');
+      var btnAddProjEng = document.getElementById('btn-add-project-selected-engineer');
+      var addProjEngInput = document.getElementById('add-software-engineer');
+
+      if (selectAddProjEng) {
+        selectAddProjEng.addEventListener('change', function(e) {
+          var val = e.target.value;
+          if (val) {
+            App.addEngineerToInput('add-software-engineer', 'add-project-engineers-tags', val);
+            e.target.value = '';
+          }
+        });
+      }
+      if (btnAddProjEng) {
+        btnAddProjEng.addEventListener('click', function() {
+          if (!selectAddProjEng) return;
+          var val = selectAddProjEng.value;
+          if (val) {
+            App.addEngineerToInput('add-software-engineer', 'add-project-engineers-tags', val);
+            selectAddProjEng.value = '';
+          } else {
+            alert('請先從下拉選單選擇一位工程師！');
+          }
+        });
+      }
+      if (addProjEngInput) {
+        addProjEngInput.addEventListener('input', function() {
+          App.renderEngineerTags('add-software-engineer', 'add-project-engineers-tags');
+        });
+      }
 
       // 助理完成度表單提交
       var completionForm = document.getElementById('form-completion-editor');
@@ -727,6 +776,83 @@
     },
 
     // 主管 / 超級使用者：指派與修改軟體工程師名單 Modal
+    // 動態依 Google Sheet 名單填充工程師下拉選單
+    populateCompanyEngineerSelect: function(selectId) {
+      var select = document.getElementById(selectId);
+      if (!select) return;
+      var engs = window.AppState.getAllCompanyEngineers();
+      
+      var html = '<option value="">-- 請由下拉選單挑選軟體工程師 --</option>';
+      engs.forEach(function(name) {
+        html += '<option value="' + name + '">💻 ' + name + '</option>';
+      });
+      select.innerHTML = html;
+    },
+
+    // 渲染工程師標籤 (支援點擊 ❌ 一鍵從輸入框移除)
+    renderEngineerTags: function(inputId, containerId) {
+      var input = document.getElementById(inputId);
+      var container = document.getElementById(containerId);
+      if (!input || !container) return;
+
+      var cur = input.value.trim();
+      var list = cur ? cur.split(/[,，、;；\s]+/).map(function(s){return s.trim();}).filter(Boolean) : [];
+      
+      var unique = [];
+      list.forEach(function(item) {
+        if (unique.indexOf(item) === -1) unique.push(item);
+      });
+
+      if (unique.length === 0) {
+        container.innerHTML = '<span class="text-xs text-muted">尚未選取任何工程師</span>';
+        return;
+      }
+
+      var html = '';
+      unique.forEach(function(name) {
+        html += '<span class="engineer-tag">' +
+          '<span>' + name + '</span>' +
+          '<span class="engineer-tag-remove" data-name="' + name + '" data-input="' + inputId + '" data-container="' + containerId + '" title="移除此工程師">&times;</span>' +
+          '</span>';
+      });
+      container.innerHTML = html;
+
+      // 綁定標籤上的移除按鈕
+      container.querySelectorAll('.engineer-tag-remove').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var rmName = e.currentTarget.getAttribute('data-name');
+          App.removeEngineerFromInput(inputId, containerId, rmName);
+        });
+      });
+    },
+
+    // 加入工程師至指定輸入框
+    addEngineerToInput: function(inputId, containerId, name) {
+      if (!name) return;
+      var input = document.getElementById(inputId);
+      if (!input) return;
+      var cur = input.value.trim();
+      var list = cur ? cur.split(/[,，、;；\s]+/).map(function(s){return s.trim();}).filter(Boolean) : [];
+      if (list.indexOf(name) === -1) {
+        list.push(name);
+        input.value = list.join(', ');
+        App.renderEngineerTags(inputId, containerId);
+      }
+    },
+
+    // 從指定輸入框移除工程師
+    removeEngineerFromInput: function(inputId, containerId, name) {
+      var input = document.getElementById(inputId);
+      if (!input) return;
+      var cur = input.value.trim();
+      var list = cur ? cur.split(/[,，、;；\s]+/).map(function(s){return s.trim();}).filter(Boolean) : [];
+      var filtered = list.filter(function(n) { return n !== name; });
+      input.value = filtered.join(', ');
+      App.renderEngineerTags(inputId, containerId);
+    },
+
+    // 開啟指派/修改軟體工程師 Modal (主管與超級管理員專用)
     openEditEngineersModal: function(projectId) {
       var proj = window.AppState.projects.find(function(p) { return p.projectId === projectId; });
       if (!proj) return;
@@ -735,6 +861,10 @@
       document.getElementById('edit-eng-modal-project-id').value = proj.projectId;
       document.getElementById('edit-eng-modal-project-title').textContent = proj.projectId + ' · ' + proj.projectName;
       document.getElementById('edit-eng-input').value = proj.softwareEngineer || '';
+
+      // 填充最新 Google Sheet 下拉選單並繪製已選標籤
+      App.populateCompanyEngineerSelect('select-company-engineer');
+      App.renderEngineerTags('edit-eng-input', 'selected-engineers-tags');
 
       modal.classList.add('show');
     },
@@ -814,6 +944,11 @@
       document.getElementById('add-project-id').value = nextId;
       document.getElementById('add-receipt-date').value = new Date().toISOString().substring(0, 10);
       document.getElementById('add-required-date').value = new Date(Date.now() + 30*86400000).toISOString().substring(0, 10);
+      
+      // 填充最新 Google Sheet 下拉選單並繪製標籤
+      App.populateCompanyEngineerSelect('select-add-project-engineer');
+      App.renderEngineerTags('add-software-engineer', 'add-project-engineers-tags');
+
       App.updateAddProjectLivePreview();
       modal.classList.add('show');
     },
@@ -914,6 +1049,7 @@
       window.ApiService.fetchData().then(function(data) {
         if (btn) btn.classList.remove('loading');
         App.showToast(data.warning ? ('注意：' + data.warning) : 'Google Sheet 資料庫已同步完成！');
+        App.populateFilterDropdowns();
         App.refreshView();
       });
     },
