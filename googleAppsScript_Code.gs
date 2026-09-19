@@ -37,47 +37,55 @@ function initDatabase() {
       "案編", "案名", "圖編", "整合項目", "收件日期", 
       "專案工程師", "需求日期", "軟體工程師", "主管填寫佔比", 
       "軟體完成時間", "硬體完成時間", "是否為智慧建築", 
-      "智慧建築等級", "戶數", "報價", "專案狀態", "完成比例", "基準積分"
+      "智慧建築等級", "戶數", "報價", "專案狀態", "完成比例", "基準積分",
+      "類別", "倍率"
     ];
     projSheet.appendRow(headers);
     projSheet.getRange(1, 1, 1, headers.length).setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold");
     
-    // 預設範例專案
+    // 預設範例專案 (三大類別：一般建築、智慧建築、修改，支援手動倍率)
     var sampleProjects = [
       [
         "UDM-2026-001", "信義天際綠能大樓", "DWG-101", "門禁整合、BA監控、智慧建築", "2026-01-10",
         "陳專案", "2026-03-30", "林軟體", "林軟體:100%", "2026-03-25",
-        "2026-03-28", "是", "鑽石", 120, 800000, "已結案", "100%", 96
+        "2026-03-28", "是", "鑽石", 120, 800000, "已結案", "100%", 96,
+        "智慧建築", 1.20
       ],
       [
         "UDM-2026-002", "板橋智慧商業園區", "DWG-102", "中央監控、電力整合", "2026-02-05",
         "王專案", "2026-05-15", "林軟體, 李程式", "林軟體:60%, 李程式:40%", "2026-05-10",
-        "2026-05-12", "是", "黃金", 80, 500000, "已結案", "100%", 57.5
+        "2026-05-12", "是", "黃金", 80, 500000, "已結案", "100%", 57.5,
+        "智慧建築", 1.15
       ],
       [
         "UDM-2026-003", "青埔明日之星住宅", "DWG-103", "弱電智慧宅、對講機系統", "2026-03-01",
         "陳專案", "2026-06-20", "李程式", "李程式:100%", "2026-06-18",
-        "2026-06-20", "否", "無", 150, 280000, "已結案", "100%", 8
+        "2026-06-20", "否", "無", 150, 280000, "已結案", "100%", 8,
+        "一般建築", 1.00
       ],
       [
-        "UDM-2026-004", "內湖科技廠維護年度案", "DWG-104", "定期系統維護、軟體巡檢", "2026-01-01",
+        "UDM-2026-004", "內湖科技廠年度修改案", "DWG-104", "定期系統維護、軟體功能修改", "2026-01-01",
         "王專案", "2026-12-31", "張工程", "張工程:100%", "2026-06-30",
-        "2026-06-30", "否", "無", 1, 60000, "已結案", "100%", 1
+        "2026-06-30", "否", "無", 1, 60000, "已結案", "100%", 1,
+        "修改", 1.00
       ],
       [
         "UDM-2026-005", "南港智慧科技大樓", "DWG-105", "AI能源最佳化、智慧建築整合", "2026-04-12",
         "陳專案", "2026-08-30", "林軟體, 張工程", "林軟體:50%, 張工程:50%", "2026-08-20",
-        "2026-08-25", "是", "銀", 240, 650000, "已結案", "100%", 71.5
+        "2026-08-25", "是", "銀", 240, 650000, "已結案", "100%", 71.5,
+        "智慧建築", 1.10
       ],
       [
         "UDM-2025-012", "去年同期案：大安敦南名邸", "DWG-090", "門禁安全監控", "2025-03-05",
         "陳專案", "2025-05-30", "林軟體", "林軟體:100%", "2025-05-28",
-        "2025-05-29", "是", "銅", 90, 400000, "已結案", "100%", 42
+        "2025-05-29", "是", "銅", 90, 400000, "已結案", "100%", 42,
+        "智慧建築", 1.05
       ],
       [
         "UDM-2025-015", "去年同期案：新竹高鐵大廈", "DWG-095", "智慧水電與弱電系統", "2025-06-01",
         "王專案", "2025-08-15", "李程式", "李程式:100%", "2025-08-10",
-        "2025-08-12", "否", "無", 45, 180000, "已結案", "100%", 5
+        "2025-08-12", "否", "無", 45, 180000, "已結案", "100%", 5,
+        "一般建築", 1.00
       ]
     ];
     sampleProjects.forEach(function(row) {
@@ -224,8 +232,43 @@ function doPost(e) {
     }
     
     if (action === "addProject") {
-      // 助理 / 超級使用者 新增專案
+      // 助理 / 超級使用者 新增專案 (三大類別：一般建築、智慧建築、修改，支援手動倍率)
       var projSheet = ss.getSheetByName(SHEET_PROJECTS);
+      var category = data.category || (data.isSmartBuilding ? "智慧建築" : "一般建築");
+      var isSmart = (category === "智慧建築");
+      var multiplier = (data.smartMultiplier !== undefined && data.smartMultiplier !== "") ? parseFloat(data.smartMultiplier) : 1.0;
+      var grade = data.smartGrade || (isSmart ? "合格" : "無");
+      var quote = parseFloat(data.quote) || 0;
+      var units = parseInt(data.units, 10) || 0;
+      var baseScore = parseFloat(data.baseScore);
+      if (isNaN(baseScore)) {
+        if (category === "修改") {
+          baseScore = parseFloat(data.modScore) || 1.0;
+        } else if (category === "智慧建築") {
+          baseScore = Math.round((quote / 10000.0) * multiplier * 100) / 100;
+        } else {
+          baseScore = (units <= 20) ? 4 : (units <= 50 ? 5 : (units <= 100 ? 6 : (units <= 200 ? 8 : 10)));
+        }
+      }
+
+      var headerRow = projSheet.getDataRange().getValues()[0] || [];
+      var hasCat = false, hasMult = false;
+      for (var h = 0; h < headerRow.length; h++) {
+        var hn = String(headerRow[h] || "").trim();
+        if (hn === "類別" || hn === "專案類別") hasCat = true;
+        if (hn === "倍率" || hn === "智慧建築倍率") hasMult = true;
+      }
+
+      // 自動無痛升級欄位標題
+      if (!hasCat) {
+        var colCat = projSheet.getLastColumn() + 1;
+        projSheet.getRange(1, colCat).setValue("類別").setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold");
+      }
+      if (!hasMult) {
+        var colMult = projSheet.getLastColumn() + 1;
+        projSheet.getRange(1, colMult).setValue("倍率").setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold");
+      }
+
       var newRow = [
         data.projectId || ("UDM-" + new Date().getFullYear() + "-" + ("000" + (projSheet.getLastRow())).slice(-3)),
         data.projectName || "",
@@ -238,13 +281,15 @@ function doPost(e) {
         data.contributionRatio || (data.softwareEngineer ? (data.softwareEngineer + ":100%") : ""),
         data.softwareCompletionDate || "",
         data.hardwareCompletionDate || "",
-        data.isSmartBuilding ? "是" : "否",
-        data.smartGrade || "無",
-        parseInt(data.units, 10) || 0,
-        parseFloat(data.quote) || 0,
+        isSmart ? "是" : "否",
+        grade,
+        units,
+        quote,
         data.status || "進行中",
         data.completionRate || "0%",
-        parseFloat(data.baseScore) || 0
+        baseScore,
+        category,
+        multiplier
       ];
       projSheet.appendRow(newRow);
       return returnSuccess({ message: "專案新增成功", projectId: newRow[0] });

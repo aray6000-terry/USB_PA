@@ -449,31 +449,31 @@
       App.updateSecurityStatusBadge();
     },
 
-    // 渲染 KPI 指標卡片
+    // 渲染 KPI 指標卡片 (支援三大專案類別：智慧建築、一般建築、修改)
     renderKpiCards: function(perfResult) {
-      var totalScore = 0, smartScore = 0, nonSmartScore = 0, maintScore = 0, uploadScore = 0;
+      var totalScore = 0, smartScore = 0, generalScore = 0, modScore = 0, uploadScore = 0;
       var totalProjects = 0;
 
       perfResult.engineers.forEach(function(e) {
         totalScore += e.totalScore;
         smartScore += e.smartScore;
-        nonSmartScore += e.nonSmartScore;
-        maintScore += e.maintenanceScore;
+        generalScore += (e.generalScore !== undefined ? e.generalScore : e.nonSmartScore);
+        modScore += (e.modScore !== undefined ? e.modScore : e.maintenanceScore);
         uploadScore += e.uploadScore;
         totalProjects += e.totalProjects;
       });
 
       var elTotal = document.getElementById('stat-total-score');
       var elSmart = document.getElementById('stat-smart-score');
-      var elNonSmart = document.getElementById('stat-nonsmart-score');
-      var elMaint = document.getElementById('stat-maint-score');
+      var elGeneral = document.getElementById('stat-nonsmart-score');
+      var elMod = document.getElementById('stat-maint-score');
       var elUpload = document.getElementById('stat-upload-score');
       var elCount = document.getElementById('stat-project-count');
 
       if (elTotal) elTotal.textContent = totalScore.toFixed(1);
       if (elSmart) elSmart.textContent = smartScore.toFixed(1);
-      if (elNonSmart) elNonSmart.textContent = nonSmartScore.toFixed(1);
-      if (elMaint) elMaint.textContent = maintScore.toFixed(1);
+      if (elGeneral) elGeneral.textContent = generalScore.toFixed(1);
+      if (elMod) elMod.textContent = modScore.toFixed(1);
       if (elUpload) elUpload.textContent = uploadScore.toFixed(1);
       if (elCount) elCount.textContent = totalProjects + ' 案';
 
@@ -550,14 +550,17 @@
             }).join('')
           : '<span class="text-muted text-xs">尚未指派軟體工程師</span>';
 
-        // 建築規格與等級標籤
-        var isSmart = (proj.isSmartBuilding === true || proj.isSmartBuilding === '是');
-        var smartTag = isSmart
-          ? '<span class="badge badge-smart">🏙️ 智慧建築 · ' + (proj.smartGrade || '合格') + '</span>'
-          : '<span class="badge badge-nonsmart">🏢 一般建築 · ' + (proj.units || 0) + '戶</span>';
+        // 建築規格與等級標籤 (三大專案類別：一般建築、智慧建築、修改)
+        var category = window.Calculator.getProjectCategory(proj);
+        var smartTag = '';
 
-        if (proj.projectType === '維護專案' || (proj.integrationItem && proj.integrationItem.indexOf('維護') !== -1)) {
-          smartTag = '<span class="badge badge-maint">🛠️ 維護專案 (固定1分)</span>';
+        if (category === '智慧建築') {
+          var mult = proj.smartMultiplier !== undefined ? proj.smartMultiplier : (window.Calculator.SMART_GRADES[proj.smartGrade] || 1.0);
+          smartTag = '<span class="badge badge-smart">🏙️ 智慧建築 · ' + (proj.smartGrade || '合格') + ' (×' + Number(mult).toFixed(2) + ')</span>';
+        } else if (category === '修改') {
+          smartTag = '<span class="badge badge-maint">🔧 修改專案 (' + baseScore.toFixed(1) + '分)</span>';
+        } else {
+          smartTag = '<span class="badge badge-nonsmart">🏢 一般建築 · ' + (proj.units || 0) + '戶</span>';
         }
 
         // 狀態標籤
@@ -1123,33 +1126,48 @@
       modal.classList.add('show');
     },
 
-    // 新增專案表單即時算分預覽
-    updateAddProjectLivePreview: function() {
+    // 新增專案表單即時算分預覽 (支援三大類別與手動倍率調整)
+    updateAddProjectLivePreview: function(e) {
       var form = document.getElementById('form-add-project');
       if (!form) return;
 
-      var isSmart = document.getElementById('add-is-smart').value === '是';
-      var grade = document.getElementById('add-smart-grade').value;
-      var units = parseInt(document.getElementById('add-units').value, 10) || 0;
-      var quote = parseFloat(document.getElementById('add-quote').value) || 0;
-      var item = document.getElementById('add-integration').value || '';
-      var type = document.getElementById('add-project-type').value || '';
+      var catEl = document.getElementById('add-project-category');
+      var category = catEl ? catEl.value : '智慧建築';
 
-      // 依條件切換欄位提示
       var smartFields = document.getElementById('smart-building-fields');
       var nonSmartFields = document.getElementById('nonsmart-building-fields');
-      if (smartFields && nonSmartFields) {
-        smartFields.style.display = isSmart ? 'block' : 'none';
-        nonSmartFields.style.display = !isSmart ? 'block' : 'none';
+      var modFields = document.getElementById('mod-building-fields');
+
+      if (smartFields) smartFields.style.display = (category === '智慧建築') ? 'block' : 'none';
+      if (nonSmartFields) nonSmartFields.style.display = (category === '一般建築') ? 'block' : 'none';
+      if (modFields) modFields.style.display = (category === '修改') ? 'block' : 'none';
+
+      // 智慧建築：若使用者更換等級，自動填入對應預設倍率
+      var gradeSelect = document.getElementById('add-smart-grade');
+      var multInput = document.getElementById('add-smart-multiplier');
+      if (e && e.target === gradeSelect && gradeSelect && multInput) {
+        var g = gradeSelect.value;
+        if (window.Calculator.SMART_GRADES[g]) {
+          multInput.value = window.Calculator.SMART_GRADES[g].toFixed(2);
+        }
       }
 
+      var grade = gradeSelect ? gradeSelect.value : '合格';
+      var multVal = multInput ? (parseFloat(multInput.value) || 1.0) : 1.0;
+      var quote = document.getElementById('add-quote') ? (parseFloat(document.getElementById('add-quote').value) || 0) : 0;
+      var units = document.getElementById('add-units') ? (parseInt(document.getElementById('add-units').value, 10) || 0) : 0;
+      var modScore = document.getElementById('add-mod-score') ? (parseFloat(document.getElementById('add-mod-score').value) || 1.0) : 1.0;
+      var modNotes = document.getElementById('add-mod-notes') ? document.getElementById('add-mod-notes').value.trim() : '';
+
       var previewProject = {
-        isSmartBuilding: isSmart,
+        category: category,
+        isSmartBuilding: (category === '智慧建築'),
         smartGrade: grade,
+        smartMultiplier: multVal,
         units: units,
         quote: quote,
-        integrationItem: item,
-        projectType: type
+        modScore: modScore,
+        projectType: (category === '修改' ? '修改' : '新案')
       };
 
       var baseScore = window.Calculator.calculateProjectBaseScore(previewProject);
@@ -1158,38 +1176,48 @@
 
       if (scoreDisplay) scoreDisplay.textContent = baseScore.toFixed(1) + ' 分';
       if (formulaDisplay) {
-        if (type === '維護專案' || item.indexOf('維護') !== -1) {
-          formulaDisplay.textContent = '計算規則：維護專案固定 1 案 1 分';
-        } else if (isSmart) {
-          var mult = window.Calculator.SMART_GRADES[grade] || 1.0;
-          formulaDisplay.textContent = '計算規則：(' + quote.toLocaleString() + ' / 10000) × 等級係數 ' + mult + ' = ' + baseScore.toFixed(1) + ' 分';
-        } else {
-          formulaDisplay.textContent = '計算規則：戶數 ' + units + ' 戶，依級距評定為 ' + baseScore + ' 分';
+        if (category === '智慧建築') {
+          formulaDisplay.textContent = '計算規則：(' + quote.toLocaleString() + ' / 10000) × 手動倍率 ' + multVal.toFixed(2) + ' = ' + baseScore.toFixed(1) + ' 分';
+        } else if (category === '一般建築') {
+          formulaDisplay.textContent = '計算規則：一般建築戶數 ' + units + ' 戶，依級距評定為 ' + baseScore + ' 分';
+        } else if (category === '修改') {
+          formulaDisplay.textContent = '計算規則：修改專案認列為 ' + baseScore.toFixed(1) + ' 分' + (modNotes ? (' (' + modNotes + ')') : '');
         }
       }
     },
 
-    // 處理建立新專案 (含防呆鎖定)
+    // 處理建立新專案 (三大類別打包與手動倍率儲存)
     handleCreateProject: function(e) {
       e.preventDefault();
       var form = document.getElementById('form-add-project');
       var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
 
-      var isSmart = document.getElementById('add-is-smart').value === '是';
+      var catEl = document.getElementById('add-project-category');
+      var category = catEl ? catEl.value : '智慧建築';
+      var isSmart = (category === '智慧建築');
       var engineersStr = document.getElementById('add-software-engineer').value.trim();
       var quoteVal = parseFloat(document.getElementById('add-quote').value) || 0;
+      var multVal = parseFloat(document.getElementById('add-smart-multiplier').value) || 1.0;
       var unitsVal = parseInt(document.getElementById('add-units').value, 10) || 0;
+      var modScoreVal = parseFloat(document.getElementById('add-mod-score') ? document.getElementById('add-mod-score').value : 1.0) || 1.0;
+      var modNotesVal = document.getElementById('add-mod-notes') ? document.getElementById('add-mod-notes').value.trim() : '';
 
       if (!engineersStr) {
         alert('請至少填寫一位軟體工程師！');
         return;
       }
 
+      var integrationText = document.getElementById('add-integration').value.trim();
+      if (category === '修改' && modNotesVal) {
+        integrationText = integrationText ? (integrationText + ' (修改: ' + modNotesVal + ')') : ('修改: ' + modNotesVal);
+      }
+
       var newProject = {
         projectId: document.getElementById('add-project-id').value.trim(),
         projectName: document.getElementById('add-project-name').value.trim(),
         drawingId: document.getElementById('add-drawing-id').value.trim(),
-        integrationItem: document.getElementById('add-integration').value.trim(),
+        category: category,
+        integrationItem: integrationText,
         receiptDate: document.getElementById('add-receipt-date').value,
         projectEngineer: document.getElementById('add-project-engineer').value.trim(),
         requiredDate: document.getElementById('add-required-date').value,
@@ -1199,9 +1227,11 @@
         hardwareCompletionDate: document.getElementById('add-hardware-completion-date').value,
         isSmartBuilding: isSmart,
         smartGrade: isSmart ? document.getElementById('add-smart-grade').value : '無',
+        smartMultiplier: isSmart ? multVal : 1.0,
         units: unitsVal,
         quote: quoteVal,
-        projectType: document.getElementById('add-project-type').value,
+        modScore: (category === '修改') ? modScoreVal : null,
+        projectType: (category === '修改') ? '修改' : '新案',
         status: document.getElementById('add-status').value,
         completionRate: document.getElementById('add-completion-rate').value + '%'
       };

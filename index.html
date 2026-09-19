@@ -156,13 +156,13 @@
           <span id="stat-smart-score">0.0</span>
           <span class="kpi-unit">分</span>
         </div>
-        <div class="kpi-subtext">計算規則：(報價/10000) × 等級係數</div>
+        <div class="kpi-subtext">計算規則：(報價/10000) × 手動倍率</div>
       </div>
 
-      <!-- 非智慧建築積分 -->
+      <!-- 一般建築積分 -->
       <div class="kpi-card nonsmart">
         <div class="kpi-header">
-          <span class="kpi-title">非智慧建築積分</span>
+          <span class="kpi-title">一般建築專案積分</span>
           <span class="kpi-icon">🏢</span>
         </div>
         <div class="kpi-value">
@@ -172,17 +172,17 @@
         <div class="kpi-subtext">計算規則：依戶數級距評定 (4~10分)</div>
       </div>
 
-      <!-- 維護專案積分 -->
+      <!-- 修改專案積分 -->
       <div class="kpi-card maintenance">
         <div class="kpi-header">
-          <span class="kpi-title">維護專案積分</span>
-          <span class="kpi-icon">🛠️</span>
+          <span class="kpi-title">修改專案積分</span>
+          <span class="kpi-icon">🔧</span>
         </div>
         <div class="kpi-value">
           <span id="stat-maint-score">0.0</span>
           <span class="kpi-unit">分</span>
         </div>
-        <div class="kpi-subtext">計算規則：固定 1 案 1 分</div>
+        <div class="kpi-subtext">計算規則：預設 1 案 1 分 (支援自訂)</div>
       </div>
 
       <!-- 每月固定上傳資料 -->
@@ -276,7 +276,7 @@
           <div class="chart-card-header">
             <div>
               <div class="chart-card-title">📊 各軟體工程師績效積分項目分佈圖</div>
-              <div class="chart-card-desc">展示智慧建築、非智慧建築、維護專案與每月上傳之堆疊結構</div>
+              <div class="chart-card-desc">展示智慧建築、一般建築、修改專案與每月上傳之堆疊結構</div>
             </div>
           </div>
           <div class="chart-container">
@@ -289,7 +289,7 @@
           <div class="chart-card-header">
             <div>
               <div class="chart-card-title">🍩 全體專案積分結構佔比</div>
-              <div class="chart-card-desc">智慧建築 vs 一般戶數建築 vs 維護 vs 上傳</div>
+              <div class="chart-card-desc">智慧建築 vs 一般建築 vs 修改 vs 每月上傳</div>
             </div>
           </div>
           <div class="chart-container">
@@ -468,47 +468,63 @@
           </div>
 
           <div class="form-row">
-            <div class="form-group">
-              <label for="add-project-type">專案類別</label>
-              <select id="add-project-type" class="form-control">
-                <option value="新案">一般新案</option>
-                <option value="維護專案">維護專案 (固定 1 案 1 分)</option>
+            <div class="form-group" style="flex: 1;">
+              <label for="add-project-category">專案類別 <span class="text-danger">*</span></label>
+              <select id="add-project-category" class="form-control font-semibold">
+                <option value="智慧建築" selected>🏙️ 智慧建築 (報價/10000 × 手動倍率)</option>
+                <option value="一般建築">🏢 一般建築 (依戶數級距 4~10分)</option>
+                <option value="修改">🔧 修改 (專案修改案，預設1分支援自訂)</option>
               </select>
-            </div>
-            <div class="form-group">
-              <label for="add-is-smart">是否為智慧建築</label>
-              <select id="add-is-smart" class="form-control">
-                <option value="是">是 (智慧建築)</option>
-                <option value="否">否 (一般建築依戶數)</option>
-              </select>
+              <!-- 隱藏欄位確保舊有相容性 -->
+              <input type="hidden" id="add-project-type" value="新案">
+              <input type="hidden" id="add-is-smart" value="是">
             </div>
           </div>
 
-          <!-- 智慧建築特有欄位 -->
+          <!-- 智慧建築特有欄位 (報價 + 等級 + 手動倍率) -->
           <div id="smart-building-fields">
             <div class="form-row">
-              <div class="form-group">
-                <label for="add-smart-grade">智慧建築等級</label>
-                <select id="add-smart-grade" class="form-control">
-                  <option value="合格">合格 (係數 ×1.0)</option>
-                  <option value="銅">銅級 (係數 ×1.05)</option>
-                  <option value="銀">銀級 (係數 ×1.10)</option>
-                  <option value="黃金">黃金級 (係數 ×1.15)</option>
-                  <option value="鑽石">鑽石級 (係數 ×1.20)</option>
-                </select>
-              </div>
               <div class="form-group">
                 <label for="add-quote">報價金額 (元)</label>
                 <input type="number" id="add-quote" class="form-control" value="500000" min="0" step="10000">
               </div>
+              <div class="form-group">
+                <label for="add-smart-grade">智慧建築推薦等級</label>
+                <select id="add-smart-grade" class="form-control">
+                  <option value="合格">合格 (預設 ×1.00)</option>
+                  <option value="銅級">銅級 (預設 ×1.05)</option>
+                  <option value="銀級">銀級 (預設 ×1.10)</option>
+                  <option value="黃金級">黃金級 (預設 ×1.15)</option>
+                  <option value="鑽石級">鑽石級 (預設 ×1.20)</option>
+                  <option value="自訂">自訂手動倍率</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="add-smart-multiplier">手動調整倍率 (可自由輸入)</label>
+                <input type="number" id="add-smart-multiplier" class="form-control font-mono font-bold" value="1.00" min="0.01" step="0.01">
+              </div>
             </div>
           </div>
 
-          <!-- 非智慧建築戶數欄位 -->
+          <!-- 一般建築戶數欄位 -->
           <div id="nonsmart-building-fields" style="display: none;">
             <div class="form-group">
               <label for="add-units">建築戶數 (&le;20: 4分, 21~50: 5分, 51~100: 6分, 101~200: 8分, 201以上: 10分)</label>
               <input type="number" id="add-units" class="form-control" value="80" min="1">
+            </div>
+          </div>
+
+          <!-- 修改專案特有欄位 -->
+          <div id="mod-building-fields" style="display: none;">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="add-mod-score">修改專案點數 (預設 1 案 1 分，可手動自訂)</label>
+                <input type="number" id="add-mod-score" class="form-control font-mono font-bold" value="1.0" min="0.1" step="0.1">
+              </div>
+              <div class="form-group">
+                <label for="add-mod-notes">修改項目與原因備註</label>
+                <input type="text" id="add-mod-notes" class="form-control" placeholder="例：系統邏輯改版、業主需求變更">
+              </div>
             </div>
           </div>
 

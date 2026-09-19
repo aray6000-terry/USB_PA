@@ -1,5 +1,6 @@
 /**
  * 優德美科技 - 績效考核核心計算引擎
+ * 支援三大專案類別（一般建築、智慧建築、修改）與智慧建築手動倍率調整機制
  * 嚴格遵循：只評估軟體工程師、多位工程師主管填寫佔比、月/年區段篩選、去年同期比較
  */
 
@@ -7,7 +8,7 @@
   'use strict';
 
   var Calculator = {
-    // 等級權重
+    // 智慧建築預設等級權重 (提供手動倍率連動預設值)
     SMART_GRADES: {
       '合格': 1.0,
       '銅': 1.05,
@@ -20,32 +21,58 @@
       '鑽石級': 1.20
     },
 
+    // 0. 取得專案標準分類：一般建築、智慧建築、修改 (向下相容舊資料)
+    getProjectCategory: function(project) {
+      if (!project) return '一般建築';
+      var cat = (project.category || project['專案類別'] || project['類別'] || '').toString().trim();
+      if (cat === '智慧建築' || cat === '一般建築' || cat === '修改') {
+        return cat;
+      }
+
+      // 向下相容既有資料庫格式
+      var type = (project.projectType || project['專案類型'] || '').toString();
+      var item = (project.integrationItem || project['整合項目'] || '').toString();
+      if (type === '維護專案' || item.indexOf('維護') !== -1 || type === '修改' || item.indexOf('修改') !== -1) {
+        return '修改';
+      }
+
+      var isSmartVal = project.isSmartBuilding !== undefined ? project.isSmartBuilding : project['是否為智慧建築'];
+      var isSmart = isSmartVal === true || isSmartVal === '是' || isSmartVal === 'true' || isSmartVal === 1;
+      return isSmart ? '智慧建築' : '一般建築';
+    },
+
     // 1. 計算專案基準分 (Base Score)
     calculateProjectBaseScore: function(project) {
       if (!project) return 0;
+      var category = Calculator.getProjectCategory(project);
 
-      // 檢查是否為維護專案 (整合項目或專案類型包含維護)
-      var item = (project.integrationItem || project['整合項目'] || '').toString();
-      var type = (project.projectType || project['專案類型'] || '').toString();
-      if (type === '維護專案' || item.indexOf('維護') !== -1) {
-        return 1.0; // 維護專案: 1 案 1 分
+      // 類別 1: 修改 (預設 1 案 1 分，支援手動自訂修改點數)
+      if (category === '修改') {
+        if (project.modScore !== undefined && project.modScore !== null && project.modScore !== '') {
+          return parseFloat(project.modScore) || 0;
+        }
+        return 1.0;
       }
 
-      // 檢查是否為智慧建築
-      var isSmartVal = project.isSmartBuilding !== undefined ? project.isSmartBuilding : project['是否為智慧建築'];
-      var isSmart = isSmartVal === true || isSmartVal === '是' || isSmartVal === 'true' || isSmartVal === 1;
-
-      if (isSmart) {
+      // 類別 2: 智慧建築 (公式：(報價金額 / 10000) * 倍率，支援手動倍率調整機制)
+      if (category === '智慧建築') {
         var quote = parseFloat(project.quote || project['報價']) || 0;
-        var gradeRaw = (project.smartGrade || project['智慧建築等級'] || '合格').toString().trim();
-        var multiplier = Calculator.SMART_GRADES[gradeRaw] || 1.0;
-        
-        // 公式：(報價金額 / 10000) * 等級係數
+        var multiplier = 1.0;
+
+        // 優先採用手動指定倍率 (smartMultiplier / 倍率)
+        var rawMultiplier = project.smartMultiplier !== undefined ? project.smartMultiplier : (project['智慧建築倍率'] || project['倍率']);
+        if (rawMultiplier !== undefined && rawMultiplier !== null && rawMultiplier !== '') {
+          multiplier = parseFloat(rawMultiplier) || 1.0;
+        } else {
+          var gradeRaw = (project.smartGrade || project['智慧建築等級'] || '合格').toString().trim();
+          multiplier = Calculator.SMART_GRADES[gradeRaw] || 1.0;
+        }
+
         var score = (quote / 10000.0) * multiplier;
         return Math.round(score * 100) / 100;
       }
 
-      // 非智慧建築：依戶數級距 (<=20: 4分, 21~50: 5分, 51~100: 6分, 101~200: 8分, 201以上: 10分)
+      // 類別 3: 一般建築：依戶數級距 (<=20: 4分, 21~50: 5分, 51~100: 6分, 101~200: 8分, 201以上: 10分)
       var units = parseInt(project.units || project['戶數'], 10) || 0;
       if (units <= 20) return 4.0;
       if (units <= 50) return 5.0;
@@ -121,30 +148,28 @@
       });
     },
 
-    // 5. 判斷專案是否落入指定時間區段 (A方案：雙軌判定 - 優先以軟體完成時間判定；若進行中未完成則退回依收件/需求日期判定所屬年度)
+    // 5. 判斷專案是否落入指定時間區段 (雙軌判定：軟體完成時間 vs 收件/需求日期)
     isProjectInPeriod: function(project, period) {
       if (!period || period === 'ALL') return true;
       var dateStr = (project.softwareCompletionDate || project['軟體完成時間'] || '').toString().trim();
       if (!dateStr) {
-        // 進行中專案 fallback：以收件日期或需求日期作為歸屬基準
         dateStr = (project.receiptDate || project['收件日期'] || project.requiredDate || project['需求日期'] || '').toString().trim();
       }
       if (!dateStr) return false;
 
-      // 支援 YYYY-MM 格式 或 YYYY 格式
-      if (period.length === 7) { // 例如 '2026-03'
+      if (period.length === 7) { // '2026-03'
         return dateStr.substring(0, 7) === period;
-      } else if (period.length === 4) { // 例如 '2026'
+      } else if (period.length === 4) { // '2026'
         return dateStr.substring(0, 4) === period;
       }
       return true;
     },
 
-    // 6. 統計所有工程師在指定區段之總績效 (含智慧、非智慧、維護、每月上傳、以及去年同期比較)
+    // 6. 統計所有工程師在指定區段之總績效 (智慧建築、一般建築、修改、每月上傳、以及去年同期比較)
     aggregatePerformance: function(projects, uploads, options) {
       options = options || {};
-      var currentPeriod = options.period || '2026'; // '2026' 或 '2026-06' 或 'ALL'
-      var targetEngineer = options.engineer; // 可篩選單一工程師
+      var currentPeriod = options.period || '2026';
+      var targetEngineer = options.engineer;
 
       // 計算去年同期 Period 字串
       var lastYearPeriod = null;
@@ -155,7 +180,7 @@
         }
       }
 
-      var statsMap = {}; // key: engineer name
+      var statsMap = {};
 
       function initStats(name) {
         if (!statsMap[name]) {
@@ -164,10 +189,10 @@
             totalScore: 0,
             smartScore: 0,
             smartCount: 0,
-            nonSmartScore: 0,
-            nonSmartCount: 0,
-            maintenanceScore: 0,
-            maintenanceCount: 0,
+            generalScore: 0,
+            generalCount: 0,
+            modScore: 0,
+            modCount: 0,
             uploadScore: 0,
             uploadCount: 0,
             totalProjects: 0,
@@ -175,6 +200,23 @@
             lastYearProjects: 0,
             projectsList: []
           };
+          // 向下相容既有屬性 getter/setter
+          Object.defineProperty(statsMap[name], 'nonSmartScore', {
+            get: function() { return this.generalScore; },
+            set: function(v) { this.generalScore = v; }
+          });
+          Object.defineProperty(statsMap[name], 'nonSmartCount', {
+            get: function() { return this.generalCount; },
+            set: function(v) { this.generalCount = v; }
+          });
+          Object.defineProperty(statsMap[name], 'maintenanceScore', {
+            get: function() { return this.modScore; },
+            set: function(v) { this.modScore = v; }
+          });
+          Object.defineProperty(statsMap[name], 'maintenanceCount', {
+            get: function() { return this.modCount; },
+            set: function(v) { this.modCount = v; }
+          });
         }
       }
 
@@ -185,13 +227,7 @@
 
         var shares = Calculator.calculateEngineerProjectShares(proj);
         var baseScore = Calculator.calculateProjectBaseScore(proj);
-
-        // 專案類型判斷
-        var item = (proj.integrationItem || proj['整合項目'] || '').toString();
-        var type = (proj.projectType || proj['專案類型'] || '').toString();
-        var isMaint = (type === '維護專案' || item.indexOf('維護') !== -1);
-        var isSmartVal = proj.isSmartBuilding !== undefined ? proj.isSmartBuilding : proj['是否為智慧建築'];
-        var isSmart = !isMaint && (isSmartVal === true || isSmartVal === '是' || isSmartVal === 'true' || isSmartVal === 1);
+        var category = Calculator.getProjectCategory(proj);
 
         shares.forEach(function(sh) {
           var eng = sh.engineer;
@@ -200,23 +236,21 @@
           initStats(eng);
 
           if (inCurrent) {
-            // 判斷是否為已完成專案 (軟體完成時間有值 或 狀態為已結案/軟體完成)
             var isCompleted = !!((proj.softwareCompletionDate || proj['軟體完成時間'] || '').toString().trim() || proj.status === '已結案' || proj.status === '軟體完成');
 
-            // 考核認列總積分與已完成專案數只統計「軟體已完成」之專案，進行中專案僅列入清單供管理追蹤
             if (isCompleted) {
               statsMap[eng].totalScore += sh.earnedScore;
               statsMap[eng].totalProjects += 1;
 
-              if (isMaint) {
-                statsMap[eng].maintenanceScore += sh.earnedScore;
-                statsMap[eng].maintenanceCount += 1;
-              } else if (isSmart) {
+              if (category === '智慧建築') {
                 statsMap[eng].smartScore += sh.earnedScore;
                 statsMap[eng].smartCount += 1;
-              } else {
-                statsMap[eng].nonSmartScore += sh.earnedScore;
-                statsMap[eng].nonSmartCount += 1;
+              } else if (category === '一般建築') {
+                statsMap[eng].generalScore += sh.earnedScore;
+                statsMap[eng].generalCount += 1;
+              } else if (category === '修改') {
+                statsMap[eng].modScore += sh.earnedScore;
+                statsMap[eng].modCount += 1;
               }
             }
 
@@ -225,7 +259,7 @@
               share: sh,
               baseScore: baseScore,
               isCompleted: isCompleted,
-              category: isMaint ? '維護' : (isSmart ? '智慧建築' : '非智慧建築')
+              category: category
             });
           }
 
@@ -248,25 +282,24 @@
           var score = parseFloat(up.earnedScore || up['核可積分']) || (auditStatus === '審核通過' ? 0.2 : 0);
 
           if (targetEngineer && targetEngineer !== eng) return;
+
           initStats(eng);
 
-          // 判斷年月是否符合 currentPeriod
-          var matchCurrent = false;
+          var inCurrent = false;
           if (!currentPeriod || currentPeriod === 'ALL') {
-            matchCurrent = true;
+            inCurrent = true;
           } else if (currentPeriod.length === 7) {
-            matchCurrent = (ym === currentPeriod);
+            inCurrent = (ym === currentPeriod);
           } else if (currentPeriod.length === 4) {
-            matchCurrent = (ym.substring(0, 4) === currentPeriod);
+            inCurrent = (ym.substring(0, 4) === currentPeriod);
           }
 
-          if (matchCurrent && auditStatus === '審核通過') {
+          if (inCurrent && auditStatus === '審核通過') {
             statsMap[eng].uploadScore += score;
             statsMap[eng].uploadCount += 1;
             statsMap[eng].totalScore += score;
           }
 
-          // 去年同期
           if (lastYearPeriod) {
             var matchLast = false;
             if (lastYearPeriod.length === 7) {
@@ -286,12 +319,12 @@
         var item = statsMap[k];
         item.totalScore = Math.round(item.totalScore * 100) / 100;
         item.smartScore = Math.round(item.smartScore * 100) / 100;
-        item.nonSmartScore = Math.round(item.nonSmartScore * 100) / 100;
-        item.maintenanceScore = Math.round(item.maintenanceScore * 100) / 100;
+        item.generalScore = Math.round(item.generalScore * 100) / 100;
+        item.modScore = Math.round(item.modScore * 100) / 100;
         item.uploadScore = Math.round(item.uploadScore * 100) / 100;
         item.lastYearTotalScore = Math.round(item.lastYearTotalScore * 100) / 100;
 
-        // 計算同比成長率 (YoY Growth Rate)
+        // 同比成長率
         var diff = item.totalScore - item.lastYearTotalScore;
         var growthRate = 0;
         if (item.lastYearTotalScore > 0) {
@@ -319,4 +352,4 @@
   };
 
   window.Calculator = Calculator;
-})(window);
+})(typeof window !== 'undefined' ? window : global);

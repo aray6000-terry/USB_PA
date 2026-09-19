@@ -167,6 +167,7 @@
       projectId: 'UDM-2026-001',
       projectName: '信義天際綠能大樓',
       drawingId: 'DWG-101',
+      category: '智慧建築',
       integrationItem: '門禁整合、BA監控、智慧建築標章',
       receiptDate: '2026-01-10',
       projectEngineer: '陳專案',
@@ -177,6 +178,7 @@
       hardwareCompletionDate: '2026-03-28',
       isSmartBuilding: true,
       smartGrade: '鑽石',
+      smartMultiplier: 1.20,
       units: 120,
       quote: 800000,
       status: '已結案',
@@ -186,6 +188,7 @@
       projectId: 'UDM-2026-002',
       projectName: '板橋智慧商業園區',
       drawingId: 'DWG-102',
+      category: '智慧建築',
       integrationItem: '中央監控、智慧電表連動整合',
       receiptDate: '2026-02-05',
       projectEngineer: '王專案',
@@ -196,6 +199,7 @@
       hardwareCompletionDate: '2026-05-12',
       isSmartBuilding: true,
       smartGrade: '黃金',
+      smartMultiplier: 1.15,
       units: 80,
       quote: 500000,
       status: '已結案',
@@ -205,6 +209,7 @@
       projectId: 'UDM-2026-003',
       projectName: '青埔明日之星優質住宅',
       drawingId: 'DWG-103',
+      category: '一般建築',
       integrationItem: '弱電智慧宅對講系統',
       receiptDate: '2026-03-01',
       projectEngineer: '陳專案',
@@ -222,9 +227,10 @@
     },
     {
       projectId: 'UDM-2026-004',
-      projectName: '內湖科技廠年度軟體維護案',
+      projectName: '內湖科技廠年度軟體修改案',
       drawingId: 'DWG-104',
-      integrationItem: '定期系統維護與安全修補',
+      category: '修改',
+      integrationItem: '定期系統功能調整與修改',
       receiptDate: '2026-01-01',
       projectEngineer: '王專案',
       requiredDate: '2026-12-31',
@@ -236,7 +242,8 @@
       smartGrade: '無',
       units: 1,
       quote: 60000,
-      projectType: '維護專案',
+      modScore: 1.0,
+      projectType: '修改',
       status: '已結案',
       completionRate: '100%'
     },
@@ -244,6 +251,7 @@
       projectId: 'UDM-2026-005',
       projectName: '南港智慧科技總部大樓',
       drawingId: 'DWG-105',
+      category: '智慧建築',
       integrationItem: 'AI空調節能與智慧建築系統',
       receiptDate: '2026-04-12',
       projectEngineer: '陳專案',
@@ -254,6 +262,7 @@
       hardwareCompletionDate: '2026-08-25',
       isSmartBuilding: true,
       smartGrade: '銀',
+      smartMultiplier: 1.10,
       units: 240,
       quote: 650000,
       status: '已結案',
@@ -263,6 +272,7 @@
       projectId: 'UDM-2026-006',
       projectName: '竹北高鐵新創生醫園區',
       drawingId: 'DWG-106',
+      category: '智慧建築',
       integrationItem: '微氣候感知與環境感測系統',
       receiptDate: '2026-05-10',
       projectEngineer: '王專案',
@@ -273,6 +283,7 @@
       hardwareCompletionDate: '2026-09-08',
       isSmartBuilding: true,
       smartGrade: '合格',
+      smartMultiplier: 1.00,
       units: 45,
       quote: 300000,
       status: '已結案',
@@ -282,6 +293,7 @@
       projectId: 'UDM-2026-007',
       projectName: '台中七期市政尊爵住宅',
       drawingId: 'DWG-107',
+      category: '一般建築',
       integrationItem: '全棟智能居家系統整合',
       receiptDate: '2026-06-01',
       projectEngineer: '陳專案',
@@ -503,7 +515,20 @@
       // 載入本地快取專案與上傳紀錄
       var cachedProj = localStorage.getItem('udm_projects');
       if (cachedProj) {
-        try { State.projects = JSON.parse(cachedProj); } catch(e) { State.projects = DEFAULT_PROJECTS; }
+        try {
+          State.projects = JSON.parse(cachedProj);
+          if (Array.isArray(State.projects)) {
+            State.projects.forEach(function(p) {
+              if (!p.category && window.Calculator) {
+                p.category = window.Calculator.getProjectCategory(p);
+              }
+              if (p.category === '智慧建築' && (p.smartMultiplier === undefined || p.smartMultiplier === null)) {
+                var mult = window.Calculator ? window.Calculator.SMART_GRADES[p.smartGrade] : 1.0;
+                p.smartMultiplier = mult || 1.0;
+              }
+            });
+          }
+        } catch(e) { State.projects = DEFAULT_PROJECTS; }
       } else {
         State.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
         State.saveProjectsToLocal();

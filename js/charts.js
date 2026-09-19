@@ -33,8 +33,8 @@
       var labels = engineers.map(function(e) { return e.name; });
 
       var smartData = engineers.map(function(e) { return e.smartScore; });
-      var nonSmartData = engineers.map(function(e) { return e.nonSmartScore; });
-      var maintenanceData = engineers.map(function(e) { return e.maintenanceScore; });
+      var generalData = engineers.map(function(e) { return (e.generalScore !== undefined ? e.generalScore : e.nonSmartScore); });
+      var modData = engineers.map(function(e) { return (e.modScore !== undefined ? e.modScore : e.maintenanceScore); });
       var uploadData = engineers.map(function(e) { return e.uploadScore; });
 
       if (ChartsModule.chartEngineerCategories) {
@@ -55,16 +55,16 @@
               borderRadius: 4
             },
             {
-              label: '非智慧建築積分',
-              data: nonSmartData,
+              label: '一般建築積分',
+              data: generalData,
               backgroundColor: 'rgba(16, 185, 129, 0.85)', // Emerald
               borderColor: 'rgba(16, 185, 129, 1)',
               borderWidth: 1,
               borderRadius: 4
             },
             {
-              label: '維護專案 (1分/案)',
-              data: maintenanceData,
+              label: '修改專案積分',
+              data: modData,
               backgroundColor: 'rgba(245, 158, 11, 0.85)', // Amber
               borderColor: 'rgba(245, 158, 11, 1)',
               borderWidth: 1,
@@ -198,11 +198,11 @@
       if (!ctx) return;
 
       var engineers = perfData.engineers || [];
-      var totalSmart = 0, totalNonSmart = 0, totalMaint = 0, totalUpload = 0;
+      var totalSmart = 0, totalGeneral = 0, totalMod = 0, totalUpload = 0;
       engineers.forEach(function(e) {
         totalSmart += e.smartScore;
-        totalNonSmart += e.nonSmartScore;
-        totalMaint += e.maintenanceScore;
+        totalGeneral += (e.generalScore !== undefined ? e.generalScore : e.nonSmartScore);
+        totalMod += (e.modScore !== undefined ? e.modScore : e.maintenanceScore);
         totalUpload += e.uploadScore;
       });
 
@@ -213,12 +213,12 @@
       ChartsModule.chartTypeDistribution = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['智慧建築', '非智慧建築', '維護專案', '每月固定上傳'],
+          labels: ['智慧建築', '一般建築', '修改', '每月固定上傳'],
           datasets: [{
             data: [
               Math.round(totalSmart * 10) / 10,
-              Math.round(totalNonSmart * 10) / 10,
-              Math.round(totalMaint * 10) / 10,
+              Math.round(totalGeneral * 10) / 10,
+              Math.round(totalMod * 10) / 10,
               Math.round(totalUpload * 10) / 10
             ],
             backgroundColor: [
@@ -279,7 +279,7 @@
           '<td>' + e.totalProjects + ' 案 (去年 ' + e.lastYearProjects + ' 案)</td>' +
           '<td>' +
             '<div class="mini-breakdown text-xs text-muted">' +
-              '智: ' + e.smartScore.toFixed(1) + ' | 非: ' + e.nonSmartScore.toFixed(1) + ' | 維: ' + e.maintenanceScore.toFixed(1) + ' | 傳: ' + e.uploadScore.toFixed(1) +
+              '智: ' + e.smartScore.toFixed(1) + ' | 般: ' + (e.generalScore !== undefined ? e.generalScore : e.nonSmartScore).toFixed(1) + ' | 改: ' + (e.modScore !== undefined ? e.modScore : e.maintenanceScore).toFixed(1) + ' | 傳: ' + e.uploadScore.toFixed(1) +
             '</div>' +
           '</td>' +
         '</tr>';
